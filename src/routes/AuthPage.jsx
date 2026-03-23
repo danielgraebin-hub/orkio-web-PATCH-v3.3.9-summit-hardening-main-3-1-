@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, forgotPassword, resetPassword, validateInvestorAccessCode } from "../ui/api.js";
-import { setSession, getTenant, setTenant, savePendingOtpContext, completeOtpLogin } from "../lib/auth.js";
+import { setSession, getTenant, setTenant, savePendingOtpContext, getPendingOtpContext, completeOtpLogin } from "../lib/auth.js";
 
 export default function AuthPage() {
   const nav = useNavigate();
@@ -110,8 +110,9 @@ export default function AuthPage() {
   }
 
   async function doVerifyOtp() {
-    const pendingCtx = window?.localStorage ? JSON.parse(localStorage.getItem("orkio_pending_otp") || "null") : null;
-    const emailNormalized = normalizeEmail((pendingCtx?.email) || pendingEmail || email);
+    const pendingCtx = getPendingOtpContext();
+    const resolvedTenant = pendingCtx?.tenant || tenant;
+    const emailNormalized = normalizeEmail(pendingCtx?.email || pendingEmail || email);
 
     setBusy(true);
     setStatus("Verifying code...");
@@ -119,8 +120,8 @@ export default function AuthPage() {
     try {
       const { data } = await apiFetch("/api/auth/login/verify-otp", {
         method: "POST",
-        org: (pendingCtx?.tenant || tenant),
-        body: { tenant: (pendingCtx?.tenant || tenant), email: emailNormalized, code: (otpCode || "").trim() },
+        org: resolvedTenant,
+        body: { tenant: resolvedTenant, email: emailNormalized, code: (otpCode || "").trim() },
       });
 
       if (data?.pending_approval || data?.auth_status === "pending_approval") {
@@ -133,8 +134,8 @@ export default function AuthPage() {
         return;
       }
 
-      setTenant((pendingCtx?.tenant || tenant));
-      completeOtpLogin({ ...data, tenant: (pendingCtx?.tenant || tenant) });
+      setTenant(resolvedTenant);
+      completeOtpLogin({ ...data, tenant: resolvedTenant });
       nav(data.user?.role === "admin" ? "/admin" : (data.redirect_to || "/app"));
     } catch (e) {
       setStatus(e.message || "Invalid code.");
