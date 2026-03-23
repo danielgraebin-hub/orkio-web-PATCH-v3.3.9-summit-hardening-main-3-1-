@@ -400,7 +400,14 @@ export const requestFounderHandoff = ({
  * ========================= */
 
 export const getRealtimeClientSecret = (payload = {}) =>
-  startRealtimeSession(payload);
+  startRealtimeSession({
+    ...payload,
+    mode:
+      payload?.mode ||
+      import.meta.env.VITE_ORKIO_RUNTIME_MODE ||
+      window.__ORKIO_ENV__?.VITE_ORKIO_RUNTIME_MODE ||
+      "platform",
+  });
 
 export async function startRealtimeSession({
   token,
@@ -444,7 +451,7 @@ export async function startSummitSession({
   ttl_seconds = 600,
   mode = "summit",
   response_profile = "stage",
-  language_profile = "en",
+  language_profile = "auto",
 } = {}) {
   const { data } = await apiFetch("/api/realtime/start", {
     method: "POST",
