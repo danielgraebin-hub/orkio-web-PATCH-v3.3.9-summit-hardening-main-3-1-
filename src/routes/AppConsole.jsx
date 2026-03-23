@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, uploadFile, chat, chatStream, transcribeAudio, requestFounderHandoff, getRealtimeClientSecret, startRealtimeSession, startSummitSession, postRealtimeEventsBatch, endRealtimeSession, getRealtimeSession, getSummitSessionScore, submitSummitSessionReview, downloadRealtimeAta as downloadRealtimeAtaFile, guardRealtimeTranscript } from "../ui/api.js";
-import { clearSession, getTenant, getToken, getUser, isAdmin, setSession } from "../lib/auth.js";
+import { clearSession, getTenant, getToken, getUser, isAdmin, setSession, logout } from "../lib/auth.js";
 import { ORKIO_VOICES, coerceVoiceId } from "../lib/voices.js";
 import TermsModal from "../ui/TermsModal.jsx";
 import PWAInstallPrompt from "../components/PWAInstallPrompt.jsx";
@@ -707,9 +707,13 @@ async function submitOnboarding() {
     }
   }
 
-  function doLogout() {
-    clearSession();
-    nav("/auth");
+  async function doLogout() {
+    try {
+      await logout({ org });
+    } finally {
+      clearSession();
+      nav("/auth");
+    }
   }
 
   function buildMessagePrefix() {
