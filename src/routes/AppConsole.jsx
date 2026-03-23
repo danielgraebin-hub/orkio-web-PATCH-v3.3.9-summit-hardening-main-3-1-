@@ -318,6 +318,7 @@ const [onboardingForm, setOnboardingForm] = useState(() => sanitizeOnboardingFor
   const rtcPcRef = useRef(null);
   const rtcDcRef = useRef(null);
   const rtcAudioElRef = useRef(null);
+  const rtcAudioProcessingRef = useRef(null);
   const rtcTextBufRef = useRef("");
   const rtcLastMagicRef = useRef("");
   const [rtcReadyToRespond, setRtcReadyToRespond] = useState(false);
@@ -329,6 +330,7 @@ const [onboardingForm, setOnboardingForm] = useState(() => sanitizeOnboardingFor
   const rtcAssistantFinalCommittedRef = useRef(false);
   const rtcResponseTimeoutRef = useRef(null);
   const rtcFallbackActiveRef = useRef(false);
+  const rtcResponseInFlightRef = useRef(false);
 
 
 const rtcIdleFollowupTimerRef = useRef(null);
@@ -347,7 +349,7 @@ const rtcLastUserActivityAtRef = useRef(0);
   const [summitSessionScore, setSummitSessionScore] = useState(null);
   const [summitReviewPending, setSummitReviewPending] = useState(false);
   const summitRuntimeModeRef = useRef((((window.__ORKIO_ENV__?.VITE_ORKIO_RUNTIME_MODE || import.meta.env.VITE_ORKIO_RUNTIME_MODE || "summit")).trim().toLowerCase() === "summit") ? "summit" : "platform");
-  const summitLanguageProfileRef = useRef((((window.__ORKIO_ENV__?.VITE_SUMMIT_LANGUAGE_PROFILE || import.meta.env.VITE_SUMMIT_LANGUAGE_PROFILE || "en")).trim() || "en"));
+  const summitLanguageProfileRef = useRef((((window.__ORKIO_ENV__?.VITE_SUMMIT_LANGUAGE_PROFILE || import.meta.env.VITE_SUMMIT_LANGUAGE_PROFILE || "auto")).trim() || "auto"));
 
 
 
@@ -1404,7 +1406,7 @@ function scheduleRealtimeIdleFollowup() {
 
       // PATCH stage-quality: explicit Summit mode without hardcoding contracts in-component
       const runtimeMode = summitRuntimeModeRef.current === "summit" ? "summit" : "platform";
-      const languageProfile = (summitLanguageProfileRef.current || "en").trim() || "en";
+      const languageProfile = (summitLanguageProfileRef.current || "auto").trim() || "auto";
       const start = runtimeMode === "summit"
         ? await startSummitSession({
             agent_id: agentIdToSend,
@@ -1460,14 +1462,84 @@ function scheduleRealtimeIdleFollowup() {
 
       // Mic input
       logRealtimeStep('start:request_mic');
-      const ms = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      const track = ms.getTracks()[0];
-      logRealtimeStep('start:mic_ok', { label: track?.label || null, readyState: track?.readyState || null });
-      pc.addTrack(track, ms);
+      const micConstraints = {
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          sampleRate: 16000,
+        },
+        video: false,
+      };
+      const ms = await navigator.mediaDevices.getUserMedia(micConstraints);
+      const rawTrack = ms.getAudioTracks?.()[0] || ms.getTracks?.()[0] || null;
+      if (!rawTrack) throw new Error("Microfone indisponível");
+
+      let outboundStream = ms;
+      let outboundTrack = rawTrack;
+
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx({ sampleRate: 16000, latencyHint: "interactive" });
+          const source = ctx.createMediaStreamSource(ms);
+          const gainNode = ctx.createGain();
+          gainNode.gain.value = 0.75;
+          const destination = ctx.createMediaStreamDestination();
+          source.connect(gainNode);
+          gainNode.connect(destination);
+          const processedTrack = destination.stream.getAudioTracks?.()[0] || null;
+          if (processedTrack) {
+            outboundStream = destination.stream;
+            outboundTrack = processedTrack;
+            rtcAudioProcessingRef.current = { ctx, source, gainNode, destination, rawStream: ms };
+          } else {
+            try { ctx.close?.(); } catch {}
+          }
+        }
+      } catch (audioErr) {
+        console.warn("[Realtime] mic processing chain unavailable, using raw track", audioErr);
+      }
+
+      logRealtimeStep('start:mic_ok', { label: outboundTrack?.label || null, readyState: outboundTrack?.readyState || null });
+      outboundTrack.onended = () => {
+        try {
+          logRealtimeStep("mic:ended");
+          if (realtimeModeRef.current) {
+            void activateSilentRealtimeFallback("mic_ended");
+          }
+        } catch {}
+      };
+      pc.addTrack(outboundTrack, outboundStream);
 
       // Events channel
       const dc = pc.createDataChannel('oai-events');
       rtcDcRef.current = dc;
+
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState || "unknown";
+        logRealtimeStep("pc:connection_state", { state });
+        if (state === "failed" || state === "disconnected" || state === "closed") {
+          setV2vError(`Realtime connection ${state}`);
+          if (realtimeModeRef.current) void activateSilentRealtimeFallback(`pc_${state}`);
+        }
+      };
+
+      dc.addEventListener("close", () => {
+        logRealtimeStep("dc:close");
+        rtcResponseInFlightRef.current = false;
+        if (realtimeModeRef.current) {
+          setV2vPhase("error");
+          setV2vError("Realtime channel closed");
+          void activateSilentRealtimeFallback("dc_closed");
+        }
+      });
+
+      dc.addEventListener("error", (err) => {
+        console.warn("[Realtime] datachannel error", err);
+        logRealtimeStep("dc:error", { message: err?.message || null });
+      });
 
             dc.addEventListener('open', () => {
         setV2vPhase('listening');
@@ -1487,7 +1559,13 @@ function scheduleRealtimeIdleFollowup() {
               type: "realtime",
               audio: {
                 input: {
-                  transcription
+                  transcription,
+                  turn_detection: {
+                    type: "server_vad",
+                    silence_duration_ms: REALTIME_SERVER_VAD_SILENCE_MS,
+                    prefix_padding_ms: REALTIME_SERVER_VAD_PREFIX_MS,
+                    create_response: false
+                  }
                 }
               }
             }
@@ -1525,8 +1603,12 @@ function scheduleRealtimeIdleFollowup() {
                   console.warn('[Realtime] magic trigger failed', err);
                 }
               } else if (raw.trim()) {
-                setUploadStatus('Ready to respond — click ▶️ or press Space/Enter.');
-                setTimeout(() => setUploadStatus(''), 1800);
+                if (REALTIME_AUTO_RESPONSE_ENABLED) {
+                  triggerRealtimeResponse("auto_vad");
+                } else {
+                  setUploadStatus('Ready to respond — click ▶️ or press Space/Enter.');
+                  setTimeout(() => setUploadStatus(''), 1800);
+                }
               }
             });
           }
@@ -1537,6 +1619,8 @@ function scheduleRealtimeIdleFollowup() {
           }
           if (ev?.type === 'response.created') {
             clearRealtimeResponseTimeout();
+            rtcResponseInFlightRef.current = true;
+            setV2vPhase('responding');
             rtcTextBufRef.current = '';
             rtcAudioTranscriptBufRef.current = '';
             rtcLastAssistantFinalRef.current = '';
@@ -1550,6 +1634,7 @@ function scheduleRealtimeIdleFollowup() {
           }
           if (ev?.type === 'response.text.done') {
             clearRealtimeResponseTimeout();
+            rtcResponseInFlightRef.current = false;
             const t = (rtcTextBufRef.current || '').trim();
             rtcTextBufRef.current = '';
             rtcAudioTranscriptBufRef.current = '';
@@ -1565,6 +1650,7 @@ function scheduleRealtimeIdleFollowup() {
           }
           if (ev?.type === 'response.audio_transcript.done' || ev?.type === 'response.audio_transcript.final') {
             clearRealtimeResponseTimeout();
+            rtcResponseInFlightRef.current = false;
             const at = ((rtcAudioTranscriptBufRef.current || '') + (ev?.transcript || '')).trim();
             rtcAudioTranscriptBufRef.current = '';
             if (!rtcAssistantFinalCommittedRef.current) {
@@ -1574,6 +1660,7 @@ function scheduleRealtimeIdleFollowup() {
 
           if (ev?.type === 'error') {
             clearRealtimeResponseTimeout();
+            rtcResponseInFlightRef.current = false;
             console.warn('[Realtime] error', ev);
             logRealtimeStep('runtime:error_event', ev);
             setV2vError(ev?.error?.message || 'Erro Realtime');
@@ -1632,18 +1719,29 @@ function scheduleRealtimeIdleFollowup() {
       if (!dc || dc.readyState !== "open") {
         throw new Error("DataChannel não está aberto");
       }
+      if (rtcResponseInFlightRef.current) {
+        logRealtimeStep("response:skip_inflight", { reason });
+        return;
+      }
+      const lastTranscript = (rtcLastFinalTranscriptRef.current || "").trim();
+      if (!lastTranscript) {
+        logRealtimeStep("response:skip_empty", { reason });
+        return;
+      }
+      rtcResponseInFlightRef.current = true;
       clearRealtimeResponseTimeout();
       clearRealtimeIdleFollowup();
-      const lastTranscript = (rtcLastFinalTranscriptRef.current || "").trim();
       rtcResponseTimeoutRef.current = setTimeout(() => {
         setUploadStatus("⌛ Realtime ainda processando...");
         setTimeout(() => setUploadStatus(""), 1200);
       }, 7000);
       dc.send(JSON.stringify({ type: "response.create", response: { output_modalities: ["audio", "text"], audio: { output: { voice: rtcVoiceRef.current } } } }));
       setRtcReadyToRespond(false);
-      setUploadStatus(reason === "magic" ? "✨ Command received — responding..." : "▶️ Responding...");
+      setV2vPhase("responding");
+      setUploadStatus(reason === "magic" ? "✨ Command received — responding..." : reason === "auto_vad" ? "🎙️ Speech detected — responding..." : "▶️ Responding...");
       setTimeout(() => setUploadStatus(""), 1500);
     } catch (e) {
+      rtcResponseInFlightRef.current = false;
       console.warn("[Realtime] triggerRealtimeResponse failed", e);
       setUploadStatus("❌ Failed to trigger realtime response.");
       setTimeout(() => setUploadStatus(""), 2000);
@@ -1846,6 +1944,15 @@ async function stopRealtime(reason = 'client_stop') {
       rtcAudioTranscriptBufRef.current = '';
       rtcAssistantFinalCommittedRef.current = false;
       rtcLastAssistantFinalRef.current = '';
+      rtcResponseInFlightRef.current = false;
+
+      const processing = rtcAudioProcessingRef.current;
+      rtcAudioProcessingRef.current = null;
+      if (processing) {
+        try { processing.destination?.stream?.getTracks?.().forEach((t) => { try { t.stop?.(); } catch {} }); } catch {}
+        try { processing.rawStream?.getTracks?.().forEach((t) => { try { t.stop?.(); } catch {} }); } catch {}
+        try { processing.ctx?.close?.(); } catch {}
+      }
     } catch {}
   }
 
