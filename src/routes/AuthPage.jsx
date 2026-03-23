@@ -148,21 +148,62 @@ export default function AuthPage() {
           marketing_consent: false,
         },
       });
-      if (data?.pending_approval) {
-        setPendingApproval(true);
-        setTab("login");
-        setStatus(data.message || "Account created. Your identity is pending OTP verification and app access will remain awaiting manual approval.");
-        return;
-      }
       if (data?.pending_otp) {
         setOtpMode(true);
-        setPendingEmail(data.email || email);
+        setPendingEmail(data.email || emailNormalized);
         setStatus(
           data.message ||
-          "Account created. Enter the verification code sent to your e-mail. Access to the app will remain pending manual approval until approved."
+          "Conta criada. Digite o código enviado ao seu e-mail para concluir a validação."
         );
         return;
       }
+
+      if (data?.pending_approval || !data?.access_token) {
+        setStatus("Conta criada. Solicitando código OTP para validar sua identidade...");
+        try {
+          const { data: loginData } = await apiFetch("/api/auth/login", {
+            method: "POST",
+            org: tenant,
+            body: { tenant, email: emailNormalized, password },
+          });
+
+          if (loginData?.pending_otp) {
+            setOtpMode(true);
+            setPendingApproval(Boolean(data?.pending_approval || loginData?.pending_approval));
+            setPendingEmail(loginData.email || emailNormalized);
+            setTab("login");
+            setStatus(
+              loginData.message ||
+              "Conta criada. Digite o código enviado ao seu e-mail para concluir a validação."
+            );
+            return;
+          }
+
+          if (loginData?.pending_approval || loginData?.auth_status === "pending_approval") {
+            setPendingApproval(true);
+            setTab("login");
+            setStatus(loginData.message || data.message || "Conta criada. Seu acesso está aguardando aprovação manual.");
+            return;
+          }
+
+          if (loginData?.access_token && loginData?.user) {
+            setSession({ token: loginData.access_token, user: loginData.user, tenant });
+            nav(loginData.user?.role === "admin" ? "/admin" : "/app");
+            return;
+          }
+        } catch (otpErr) {
+          const otpMsg = (otpErr?.message || "").toString();
+          setPendingApproval(Boolean(data?.pending_approval));
+          setTab("login");
+          setStatus(
+            otpMsg ||
+            data.message ||
+            "Conta criada. Faça login para receber o código OTP."
+          );
+          return;
+        }
+      }
+
       if (data?.access_token) {
         setSession({ token: data.access_token, user: data.user, tenant });
         nav(data.user?.role === "admin" ? "/admin" : "/app");
