@@ -30,6 +30,17 @@ function resolveRealtimeIdleDisplayName(userObj) {
   return first.replace(/[^\p{L}\p{N}]/gu, "") || "";
 }
 
+function logRealtimeStep(step, payload = undefined) {
+  try {
+    const stamp = new Date().toISOString();
+    if (payload === undefined) {
+      console.log(`[Realtime][${stamp}] ${step}`);
+    } else {
+      console.log(`[Realtime][${stamp}] ${step}`, payload);
+    }
+  } catch {}
+}
+
 
 
 // Icons (inline SVG)
@@ -1319,22 +1330,30 @@ function scheduleRealtimeIdleFollowup() {
 }
 
 
-  async function activateSilentRealtimeFallback(reason = "realtime_fallback") {
-    if (rtcFallbackActiveRef.current) return;
+  async function activateSilentRealtimeFallback(reason = "realtime_fallback", options = {}) {
+    const shouldDisarm = options?.disarm !== false;
+    if (rtcFallbackActiveRef.current && shouldDisarm) return;
     rtcFallbackActiveRef.current = true;
     clearRealtimeResponseTimeout();
     clearRealtimeIdleFollowup();
+    logRealtimeStep("fallback:activate", { reason, shouldDisarm });
     try { await stopRealtime(reason); } catch {}
-    setRealtimeMode(false);
-    realtimeModeRef.current = false;
-    setV2vPhase("fallback");
-    setUploadStatus("Realtime fallback active.");
-    setTimeout(() => setUploadStatus(""), 1200);
-    try {
-      setVoiceMode(true);
-      voiceModeRef.current = true;
-      if (!micEnabledRef.current) startMic();
-    } catch {}
+    if (shouldDisarm) {
+      setRealtimeMode(false);
+      realtimeModeRef.current = false;
+      setV2vPhase("fallback");
+      setUploadStatus("Realtime fallback active.");
+      setTimeout(() => setUploadStatus(""), 1200);
+      try {
+        setVoiceMode(true);
+        voiceModeRef.current = true;
+        if (!micEnabledRef.current) startMic();
+      } catch {}
+    } else {
+      setV2vPhase("error");
+      setUploadStatus(`❌ Realtime diagnostic: ${reason}`);
+      setTimeout(() => setUploadStatus(""), 2500);
+    }
   }
 
   async function guardAndMaybeBlockRealtimeTranscript(raw) {
@@ -1357,6 +1376,7 @@ function scheduleRealtimeIdleFollowup() {
 
   async function startRealtime() {
     try {
+      logRealtimeStep('start:begin', { threadId, destSingle, summitRuntimeMode: summitRuntimeModeRef.current, summitLanguageProfile: summitLanguageProfileRef.current });
       setV2vError(null);
       setV2vPhase('connecting');
       setUploadStatus('⚡ Conectando Realtime (WebRTC)...');
@@ -1397,8 +1417,13 @@ function scheduleRealtimeIdleFollowup() {
             language_profile: languageProfile,
           })
         : await startRealtimeSession({ agent_id: agentIdToSend, thread_id: threadId || null, voice: rtVoice, model: rtModel, ttl_seconds: 600 });
-      const EPHEMERAL_KEY = start?.client_secret?.value;
-      if (!EPHEMERAL_KEY) throw new Error('Realtime token vazio');
+      logRealtimeStep('start:session_ok', start);
+      const EPHEMERAL_KEY = start?.client_secret?.value || start?.client_secret_value || start?.value || null;
+      if (!EPHEMERAL_KEY) {
+        logRealtimeStep('start:ephemeral_missing', start);
+        throw new Error('Realtime token vazio');
+      }
+      logRealtimeStep('start:ephemeral_ok', { session_id: start?.session_id || null, thread_id: start?.thread_id || null });
 
       rtcSessionIdRef.current = start?.session_id || null;
       setLastRealtimeSessionId(start?.session_id || null);
@@ -1434,8 +1459,10 @@ function scheduleRealtimeIdleFollowup() {
       };
 
       // Mic input
+      logRealtimeStep('start:request_mic');
       const ms = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       const track = ms.getTracks()[0];
+      logRealtimeStep('start:mic_ok', { label: track?.label || null, readyState: track?.readyState || null });
       pc.addTrack(track, ms);
 
       // Events channel
@@ -1548,16 +1575,19 @@ function scheduleRealtimeIdleFollowup() {
           if (ev?.type === 'error') {
             clearRealtimeResponseTimeout();
             console.warn('[Realtime] error', ev);
+            logRealtimeStep('runtime:error_event', ev);
             setV2vError(ev?.error?.message || 'Erro Realtime');
             setV2vPhase('error');
-            void activateSilentRealtimeFallback('realtime_error');
+            void activateSilentRealtimeFallback('realtime_error', { disarm: false });
           }
         } catch {}
       });
 
       // SDP handshake
+      logRealtimeStep('start:create_offer');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      logRealtimeStep('start:local_description_set', { sdpLength: offer?.sdp?.length || 0 });
 
       const sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
         method: 'POST',
@@ -1568,21 +1598,30 @@ function scheduleRealtimeIdleFollowup() {
         },
       });
 
+      const sdpText = await sdpResponse.text().catch(() => '');
       if (!sdpResponse.ok) {
-        const t = await sdpResponse.text().catch(() => '');
-        throw new Error(`SDP handshake falhou (${sdpResponse.status}): ${t || sdpResponse.statusText}`);
+        logRealtimeStep('start:sdp_error', { status: sdpResponse.status, body: sdpText || sdpResponse.statusText });
+        throw new Error(`SDP handshake falhou (${sdpResponse.status}): ${sdpText || sdpResponse.statusText}`);
       }
 
-      const answer = { type: 'answer', sdp: await sdpResponse.text() };
+      logRealtimeStep('start:sdp_ok', { answerLength: sdpText.length });
+      const answer = { type: 'answer', sdp: sdpText };
       await pc.setRemoteDescription(answer);
+      logRealtimeStep('start:ready', { sessionId: start?.session_id || null, threadId: start?.thread_id || threadId || null });
 
     } catch (e) {
       console.error('[Realtime] startRealtime error', e);
+      logRealtimeStep('start:catch', {
+        message: e?.message || 'Falha ao iniciar Realtime',
+        stack: e?.stack || null,
+        sessionId: rtcSessionIdRef.current || null,
+        threadId: rtcThreadIdRef.current || threadId || null,
+      });
       setV2vPhase('error');
       setV2vError(e?.message || 'Falha ao iniciar Realtime');
       setUploadStatus('❌ Realtime: ' + (e?.message || 'falha'));
-      setTimeout(() => setUploadStatus(''), 3000);
-      await activateSilentRealtimeFallback('start_error');
+      setTimeout(() => setUploadStatus(''), 4000);
+      await stopRealtime('start_error_diagnostic_cleanup');
     }
   }
 
