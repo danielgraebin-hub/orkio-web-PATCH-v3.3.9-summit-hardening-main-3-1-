@@ -99,7 +99,6 @@ export default function AuthPage() {
         return;
       }
 
-      setTenant(tenant);
       setSession({ token: data.access_token, user: data.user, tenant });
       nav(data.user?.role === "admin" ? "/admin" : "/app");
     } catch (e) {
@@ -155,6 +154,12 @@ export default function AuthPage() {
       return;
     }
 
+    const nameNormalized = (name || "").trim();
+    if (!nameNormalized) {
+      setStatus("Please enter your name.");
+      return;
+    }
+
     setBusy(true);
     setPendingApproval(false);
 
@@ -185,7 +190,7 @@ export default function AuthPage() {
         body: {
           tenant,
           email: emailNormalized,
-          name: (name || "").trim(),
+          name: nameNormalized,
           password,
           access_code: isExpectedSuperAdmin ? "" : normalizedAccessCode,
           accept_terms: acceptTerms,
@@ -196,13 +201,10 @@ export default function AuthPage() {
       if (data?.access_token && data?.user) {
         setTenant(tenant);
         setSession({ token: data.access_token, user: data.user, tenant });
-        nav(data.user?.role === "admin" ? "/admin" : "/app");
+        nav(data.user?.role === "admin" ? "/admin" : (data.redirect_to || "/app"));
         return;
       }
 
-      // HOTFIX:
-      // register does not emit OTP directly in the backend.
-      // To force OTP right after signup, immediately perform the normal login flow.
       setStatus("Conta criada. Validando identidade...");
 
       const { data: loginData } = await apiFetch("/api/auth/login", {
@@ -399,7 +401,16 @@ export default function AuthPage() {
         </>
       )}
 
-      <label style={lbl}>E-mail</label>
+      <label style={lbl}>Name</label>
+        <input
+          style={inp}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Your name"
+          autoComplete="name"
+        />
+
+        <label style={lbl}>E-mail</label>
       <input
         style={inp}
         value={email}
