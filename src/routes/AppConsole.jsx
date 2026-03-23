@@ -431,7 +431,17 @@ useEffect(() => {
         setUser(data);
         try { setSession({ token: t, user: data, tenant: org }); } catch {}
 
-        if (!data?.approved_at && data?.role !== "admin") {
+        const summitApproved =
+          data &&
+          (
+            data.role === "admin" ||
+            !!data.approved_at ||
+            String(data.usage_tier || "").startsWith("summit_") ||
+            String(data.signup_source || "").toLowerCase() === "investor" ||
+            String(data.signup_code_label || "").toLowerCase() === "efata777"
+          );
+
+        if (!summitApproved) {
           clearSession();
           nav("/auth?pending_approval=1");
           return;
@@ -2705,7 +2715,26 @@ async function stopRealtime(reason = 'client_stop') {
             <div style={styles.health}>Destino: {destMode === "team" ? "Team" : destMode === "single" ? "Agente" : "Multi"} • @Team / @Orkio / @Chris / @Orion</div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: isMobile ? "wrap" : "nowrap", justifyContent: "flex-end" }}>
+            {isMobile ? (
+              <button
+                type="button"
+                onClick={doLogout}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#fff",
+                  minHeight: 40,
+                  padding: "8px 12px",
+                  borderRadius: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+                title="Sair"
+              >
+                Sair
+              </button>
+            ) : null}
             <select style={styles.select} value={destMode} onChange={(e) => setDestMode(e.target.value)}>
               <option value="team">Team</option>
               <option value="single">1 agente</option>
