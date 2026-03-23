@@ -1,3 +1,6 @@
+// src/lib/auth.js
+// Orkio Summit Auth Session Layer (final patched version)
+
 export const LS_TOKEN = "orkio_token";
 export const LS_USER = "orkio_user";
 export const LS_TENANT = "orkio_tenant";
@@ -24,25 +27,31 @@ export function getUser() {
   return safeJsonParse(localStorage.getItem(LS_USER), null);
 }
 
-export function setSession({ token, access_token, user, tenant }) {
-  const finalToken = access_token || token || "";
-  if (finalToken) localStorage.setItem(LS_TOKEN, finalToken);
-  if (tenant) localStorage.setItem(LS_TENANT, tenant);
-  if (user) localStorage.setItem(LS_USER, JSON.stringify(user));
-  localStorage.setItem(LS_SESSION_TS, String(Date.now()));
-  clearPendingOtp();
+export function isAuthenticated() {
+  return !!getToken();
 }
 
 export function setTenant(tenant) {
   localStorage.setItem(LS_TENANT, tenant || "public");
 }
 
-export function setUser(user) {
-  if (!user) {
-    localStorage.removeItem(LS_USER);
-    return;
+export function setSession({ token, access_token, user, tenant } = {}) {
+  const finalToken = access_token || token || "";
+
+  if (finalToken) {
+    localStorage.setItem(LS_TOKEN, finalToken);
   }
-  localStorage.setItem(LS_USER, JSON.stringify(user));
+
+  if (tenant) {
+    localStorage.setItem(LS_TENANT, tenant);
+  }
+
+  if (user) {
+    localStorage.setItem(LS_USER, JSON.stringify(user));
+  }
+
+  localStorage.setItem(LS_SESSION_TS, String(Date.now()));
+  clearPendingOtp();
 }
 
 export function clearSession() {
@@ -57,7 +66,16 @@ export function isAdmin(user) {
 }
 
 export function isApproved(user) {
-  return !!(user && (user.role === "admin" || user.approved_at));
+  return !!(
+    user &&
+    (
+      user.role === "admin" ||
+      user.approved_at ||
+      String(user.usage_tier || "").startsWith("summit_") ||
+      String(user.signup_source || "").toLowerCase() === "investor" ||
+      String(user.signup_code_label || "").toLowerCase() === "efata777"
+    )
+  );
 }
 
 export function hasCompletedOnboarding(user) {
@@ -88,8 +106,13 @@ export function completeOtpLogin(payload = {}) {
     access_token: payload.access_token,
     token: payload.token,
     user: payload.user,
-    tenant: payload.user?.org_slug || payload.tenant || getTenant() || "public",
+    tenant:
+      payload.user?.org_slug ||
+      payload.tenant ||
+      getTenant() ||
+      "public",
   });
+
   return payload;
 }
 
@@ -100,6 +123,7 @@ export async function logout({ apiBase = "", org, token } = {}) {
   try {
     if (authToken) {
       const url = `${apiBase || ""}/api/auth/logout`;
+
       await fetch(url, {
         method: "POST",
         headers: {
