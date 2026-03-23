@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, forgotPassword, resetPassword, validateInvestorAccessCode } from "../ui/api.js";
@@ -47,6 +46,14 @@ export default function AuthPage() {
     }
   }, []);
 
+  function normalizeEmail(value) {
+    return (value || "").trim().toLowerCase();
+  }
+
+  function normalizeAccessCode(value) {
+    return (value || "").trim().toUpperCase();
+  }
+
   function showAwaitingApproval(message) {
     setPendingApproval(true);
     setOtpMode(false);
@@ -54,29 +61,39 @@ export default function AuthPage() {
   }
 
   async function doLogin() {
+    const emailNormalized = normalizeEmail(email);
+
     setBusy(true);
     setPendingApproval(false);
     setStatus("Signing in...");
+
     try {
       const { data } = await apiFetch("/api/auth/login", {
         method: "POST",
         org: tenant,
-        body: { tenant, email, password },
+        body: { tenant, email: emailNormalized, password },
       });
+
       if (data?.pending_otp) {
         setOtpMode(true);
-        setPendingEmail(data.email || email);
-        setStatus(data.message || "Enter the verification code sent to your e-mail. If your account is still pending, access will remain awaiting manual approval after verification.");
+        setPendingEmail(data.email || emailNormalized);
+        setStatus(
+          data.message ||
+            "Enter the verification code sent to your e-mail. If your account is still pending, access will remain awaiting manual approval after verification."
+        );
         return;
       }
+
       if (data?.pending_approval || data?.auth_status === "pending_approval") {
         showAwaitingApproval(data.message || "Identity verified. Awaiting manual approval.");
         return;
       }
+
       if (!data?.access_token || !data?.user) {
         setStatus(data?.message || "Não foi possível concluir o login.");
         return;
       }
+
       setSession({ token: data.access_token, user: data.user, tenant });
       nav(data.user?.role === "admin" ? "/admin" : "/app");
     } catch (e) {
@@ -87,22 +104,28 @@ export default function AuthPage() {
   }
 
   async function doVerifyOtp() {
+    const emailNormalized = normalizeEmail(pendingEmail || email);
+
     setBusy(true);
     setStatus("Verifying code...");
+
     try {
       const { data } = await apiFetch("/api/auth/login/verify-otp", {
         method: "POST",
         org: tenant,
-        body: { tenant, email: pendingEmail || email, code: otpCode },
+        body: { tenant, email: emailNormalized, code: (otpCode || "").trim() },
       });
+
       if (data?.pending_approval || data?.auth_status === "pending_approval") {
         showAwaitingApproval(data.message || "Identity verified. Awaiting manual approval.");
         return;
       }
+
       if (!data?.access_token || !data?.user) {
         setStatus(data?.message || "Não foi possível concluir o login.");
         return;
       }
+
       setSession({ token: data.access_token, user: data.user, tenant });
       nav(data.user?.role === "admin" ? "/admin" : "/app");
     } catch (e) {
@@ -117,24 +140,36 @@ export default function AuthPage() {
       setStatus("Password confirmation does not match.");
       return;
     }
+
     if (!acceptTerms) {
       setStatus("You must accept the legal terms before continuing.");
       return;
     }
+
     setBusy(true);
     setPendingApproval(false);
-    const emailNormalized = (email || "").trim().toLowerCase();
+
+    const emailNormalized = normalizeEmail(email);
+    const normalizedAccessCode = normalizeAccessCode(accessCode);
     const isExpectedSuperAdmin = emailNormalized === "daniel@patroai.com";
+
     setStatus(isExpectedSuperAdmin ? "Creating your account..." : "Validating access code...");
+
     try {
       if (!isExpectedSuperAdmin) {
-        const { data: valid } = await validateInvestorAccessCode({ code: accessCode, org: tenant });
+        const { data: valid } = await validateInvestorAccessCode({
+          code: normalizedAccessCode,
+          org: tenant,
+        });
+
         if (!valid?.valid) {
           setStatus("Invalid access code.");
           return;
         }
       }
+
       setStatus("Creating your account...");
+
       const { data } = await apiFetch("/api/auth/register", {
         method: "POST",
         org: tenant,
@@ -143,21 +178,23 @@ export default function AuthPage() {
           email: emailNormalized,
           name: (name || "").trim(),
           password,
-          access_code: isExpectedSuperAdmin ? "" : accessCode,
+          access_code: isExpectedSuperAdmin ? "" : normalizedAccessCode,
           accept_terms: acceptTerms,
           marketing_consent: false,
         },
       });
+
       if (data?.access_token && data?.user) {
         setSession({ token: data.access_token, user: data.user, tenant });
         nav(data.user?.role === "admin" ? "/admin" : "/app");
         return;
       }
 
-      // P0 HOTFIX:
+      // HOTFIX:
       // register does not emit OTP directly in the backend.
       // To force OTP right after signup, immediately perform the normal login flow.
       setStatus("Conta criada. Validando identidade...");
+
       const { data: loginData } = await apiFetch("/api/auth/login", {
         method: "POST",
         org: tenant,
@@ -171,7 +208,7 @@ export default function AuthPage() {
         setTab("login");
         setStatus(
           loginData.message ||
-          "Conta criada. Enviamos um código de verificação para seu e-mail. Digite-o para continuar."
+            "Conta criada. Enviamos um código de verificação para seu e-mail. Digite-o para continuar."
         );
         return;
       }
@@ -182,7 +219,7 @@ export default function AuthPage() {
         setTab("login");
         setStatus(
           loginData.message ||
-          "Conta criada com sucesso. Sua identidade foi verificada e seu acesso está aguardando aprovação manual."
+            "Conta criada com sucesso. Sua identidade foi verificada e seu acesso está aguardando aprovação manual."
         );
         return;
       }
@@ -197,6 +234,7 @@ export default function AuthPage() {
       setTab("login");
     } catch (e) {
       const detail = (e?.message || "").toString();
+
       if (/already registered/i.test(detail)) {
         setPendingApproval(false);
         setOtpMode(false);
@@ -211,10 +249,13 @@ export default function AuthPage() {
   }
 
   async function doForgotPassword() {
+    const emailNormalized = normalizeEmail(email);
+
     setBusy(true);
     setStatus("Sending reset instructions...");
+
     try {
-      const { data } = await forgotPassword({ email, tenant });
+      const { data } = await forgotPassword({ email: emailNormalized, tenant });
       setStatus(data?.message || "If this e-mail is registered, a reset link has been sent.");
       setForgotMode(false);
     } catch (e) {
@@ -229,10 +270,18 @@ export default function AuthPage() {
       setStatus("Password confirmation does not match.");
       return;
     }
+
     setBusy(true);
     setStatus("Updating password...");
+
     try {
-      const { data } = await resetPassword({ token: resetToken, password, password_confirm: passwordConfirm, tenant });
+      const { data } = await resetPassword({
+        token: resetToken,
+        password,
+        password_confirm: passwordConfirm,
+        tenant,
+      });
+
       setStatus(data?.message || "Password updated successfully.");
       setResetMode(false);
       setTab("login");
@@ -279,7 +328,7 @@ export default function AuthPage() {
     fontFamily: "system-ui",
     background: "#fff",
     borderRadius: 20,
-    boxShadow: "0 18px 48px rgba(0,0,0,0.08)"
+    boxShadow: "0 18px 48px rgba(0,0,0,0.08)",
   };
 
   return (
@@ -295,42 +344,73 @@ export default function AuthPage() {
 
       {!resetMode && (
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button disabled={otpMode || forgotMode || busy} onClick={() => setTab("login")} style={tabBtn(tab === "login")}>Login</button>
-          <button disabled={otpMode || forgotMode || busy} onClick={() => setTab("register")} style={tabBtn(tab === "register")}>Register</button>
+          <button
+            disabled={otpMode || forgotMode || busy}
+            onClick={() => setTab("login")}
+            style={tabBtn(tab === "login")}
+          >
+            Login
+          </button>
+          <button
+            disabled={otpMode || forgotMode || busy}
+            onClick={() => setTab("register")}
+            style={tabBtn(tab === "register")}
+          >
+            Register
+          </button>
         </div>
       )}
 
       <label style={lbl}>Tenant</label>
-      <input style={inp} value={tenant} onChange={(e) => setTenant(e.target.value)} placeholder="public" />
+      <input
+        style={inp}
+        value={tenant}
+        onChange={(e) => setTenant(e.target.value)}
+        placeholder="public"
+        autoComplete="organization"
+      />
 
       {!resetMode && tab === "register" && (
         <>
           <label style={lbl}>Full name</label>
-          <input style={inp} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" />
+          <input
+            style={inp}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your full name"
+            autoComplete="name"
+          />
         </>
       )}
 
       <label style={lbl}>E-mail</label>
-      <input style={inp} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@domain.com" />
+      <input
+        style={inp}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@domain.com"
+        type="email"
+        autoComplete="email"
+      />
 
-      {(forgotMode || resetMode) ? null : (
-        tab === "register"
-          ? renderPasswordField({
-              label: "Password",
-              value: password,
-              onChange: (e) => setPassword(e.target.value),
-              visible: showRegisterPassword,
-              onToggle: () => setShowRegisterPassword((v) => !v),
-              autoComplete: "new-password",
-            })
-          : renderPasswordField({
-              label: "Password",
-              value: password,
-              onChange: (e) => setPassword(e.target.value),
-              visible: showLoginPassword,
-              onToggle: () => setShowLoginPassword((v) => !v),
-              autoComplete: "current-password",
-            })
+      {forgotMode || resetMode ? null : tab === "register" ? (
+        renderPasswordField({
+          label: "Password",
+          value: password,
+          onChange: (e) => setPassword(e.target.value),
+          visible: showRegisterPassword,
+          onToggle: () => setShowRegisterPassword((v) => !v),
+          autoComplete: "new-password",
+        })
+      ) : (
+        renderPasswordField({
+          label: "Password",
+          value: password,
+          onChange: (e) => setPassword(e.target.value),
+          visible: showLoginPassword,
+          onToggle: () => setShowLoginPassword((v) => !v),
+          autoComplete: "current-password",
+        })
       )}
 
       {(tab === "register" || resetMode) && !otpMode && !forgotMode ? (
@@ -350,15 +430,39 @@ export default function AuthPage() {
       {tab === "register" && !otpMode && !forgotMode && !resetMode ? (
         <>
           <label style={lbl}>Event access code</label>
-          <input style={inp} value={accessCode} onChange={(e) => setAccessCode(e.target.value.toUpperCase())} placeholder="Enter your Summit code" />
-          <label style={{ ...lbl, display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10 }}>
-            <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} />
+          <input
+            style={inp}
+            value={accessCode}
+            onChange={(e) => setAccessCode(normalizeAccessCode(e.target.value))}
+            placeholder="Enter your Summit code"
+            autoComplete="off"
+          />
+          <label
+            style={{
+              ...lbl,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={acceptTerms}
+              onChange={(e) => setAcceptTerms(e.target.checked)}
+            />
             <span>I accept the Terms of Use, Privacy Policy and AI Governance disclosures.</span>
           </label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/terms", "_blank")}>Terms</button>
-            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/privacy", "_blank")}>Privacy</button>
-            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/ai-governance", "_blank")}>AI Governance</button>
+            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/terms", "_blank")}>
+              Terms
+            </button>
+            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/privacy", "_blank")}>
+              Privacy
+            </button>
+            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/ai-governance", "_blank")}>
+              AI Governance
+            </button>
           </div>
         </>
       ) : null}
@@ -366,22 +470,53 @@ export default function AuthPage() {
       {otpMode ? (
         <>
           <label style={lbl}>Verification code</label>
-          <input style={inp} value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="000000" />
+          <input
+            style={inp}
+            value={otpCode}
+            onChange={(e) => setOtpCode(e.target.value)}
+            placeholder="000000"
+            autoComplete="one-time-code"
+            inputMode="numeric"
+          />
         </>
       ) : null}
 
       {forgotMode ? (
-        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e5e7eb" }}>
-          <div style={{ fontSize: 14, color: "#374151", marginBottom: 8 }}>We will send a secure reset link to your e-mail.</div>
-          <button disabled={busy} style={btnPrimary} onClick={doForgotPassword}>Send reset link</button>
-          <button disabled={busy} style={{ ...btnSecondary, marginLeft: 8 }} onClick={() => setForgotMode(false)}>Cancel</button>
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            borderRadius: 12,
+            background: "#f8fafc",
+            border: "1px solid #e5e7eb",
+          }}
+        >
+          <div style={{ fontSize: 14, color: "#374151", marginBottom: 8 }}>
+            We will send a secure reset link to your e-mail.
+          </div>
+          <button disabled={busy} style={btnPrimary} onClick={doForgotPassword}>
+            Send reset link
+          </button>
+          <button
+            disabled={busy}
+            style={{ ...btnSecondary, marginLeft: 8 }}
+            onClick={() => setForgotMode(false)}
+          >
+            Cancel
+          </button>
         </div>
       ) : null}
 
       {resetMode ? (
         <>
           <label style={lbl}>Reset token</label>
-          <input style={inp} value={resetToken} onChange={(e) => setResetToken(e.target.value)} placeholder="Paste the reset token or open the reset link" />
+          <input
+            style={inp}
+            value={resetToken}
+            onChange={(e) => setResetToken(e.target.value)}
+            placeholder="Paste the reset token or open the reset link"
+            autoComplete="off"
+          />
           {renderPasswordField({
             label: "New password",
             value: password,
@@ -391,8 +526,19 @@ export default function AuthPage() {
             autoComplete: "new-password",
           })}
           <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button disabled={busy} style={btnPrimary} onClick={doResetPassword}>Reset password</button>
-            <button disabled={busy} style={btnSecondary} onClick={() => { setResetMode(false); setStatus(""); }}>Cancel</button>
+            <button disabled={busy} style={btnPrimary} onClick={doResetPassword}>
+              Reset password
+            </button>
+            <button
+              disabled={busy}
+              style={btnSecondary}
+              onClick={() => {
+                setResetMode(false);
+                setStatus("");
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </>
       ) : (
@@ -400,25 +546,57 @@ export default function AuthPage() {
           {tab === "login" ? (
             otpMode ? (
               <>
-                <button disabled={busy} style={btnPrimary} onClick={doVerifyOtp}>Verify code</button>
-                <button disabled={busy} style={btnSecondary} onClick={doLogin}>Resend code</button>
-                <button disabled={busy} style={btnSecondary} onClick={() => { setOtpMode(false); setOtpCode(""); setPendingEmail(""); setStatus(""); }}>Back</button>
+                <button disabled={busy} style={btnPrimary} onClick={doVerifyOtp}>
+                  Verify code
+                </button>
+                <button disabled={busy} style={btnSecondary} onClick={doLogin}>
+                  Resend code
+                </button>
+                <button
+                  disabled={busy}
+                  style={btnSecondary}
+                  onClick={() => {
+                    setOtpMode(false);
+                    setOtpCode("");
+                    setPendingEmail("");
+                    setStatus("");
+                  }}
+                >
+                  Back
+                </button>
               </>
             ) : (
               <>
-                <button disabled={busy} style={btnPrimary} onClick={doLogin}>Sign in</button>
-                <button disabled={busy} style={btnSecondary} onClick={() => setForgotMode(true)}>Forgot password</button>
+                <button disabled={busy} style={btnPrimary} onClick={doLogin}>
+                  Sign in
+                </button>
+                <button disabled={busy} style={btnSecondary} onClick={() => setForgotMode(true)}>
+                  Forgot password
+                </button>
               </>
             )
           ) : (
-            <button disabled={busy} style={btnPrimary} onClick={doRegister}>Create account</button>
+            <button disabled={busy} style={btnPrimary} onClick={doRegister}>
+              Create account
+            </button>
           )}
-          <button disabled={busy} style={btnSecondary} onClick={() => nav("/")}>Back</button>
+          <button disabled={busy} style={btnSecondary} onClick={() => nav("/")}>
+            Back
+          </button>
         </div>
       )}
 
       {pendingApproval ? (
-        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#fffbeb", border: "1px solid #f59e0b", color: "#78350f" }}>
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            borderRadius: 12,
+            background: "#fffbeb",
+            border: "1px solid #f59e0b",
+            color: "#78350f",
+          }}
+        >
           Your identity is confirmed, but access to the app is still awaiting manual approval.
         </div>
       ) : null}
@@ -429,9 +607,30 @@ export default function AuthPage() {
 }
 
 const lbl = { display: "block", marginTop: 12, marginBottom: 6, color: "#333" };
-const inp = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #ddd", background: "#fff", color: "#111" };
-const btnPrimary = { background: "#111", color: "#fff", padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer" };
-const btnSecondary = { background: "#f3f3f3", color: "#111", padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd", cursor: "pointer" };
+const inp = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #ddd",
+  background: "#fff",
+  color: "#111",
+};
+const btnPrimary = {
+  background: "#111",
+  color: "#fff",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "none",
+  cursor: "pointer",
+};
+const btnSecondary = {
+  background: "#f3f3f3",
+  color: "#111",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  cursor: "pointer",
+};
 const tabBtn = (active) => ({
   padding: "8px 12px",
   borderRadius: 10,
