@@ -5,6 +5,7 @@ import { clearSession, getTenant, getToken, getUser, isAdmin, setSession } from 
 import { ORKIO_VOICES, coerceVoiceId } from "../lib/voices.js";
 import TermsModal from "../ui/TermsModal.jsx";
 import PWAInstallPrompt from "../components/PWAInstallPrompt.jsx";
+import { startSessionHeartbeat } from "../lib/sessionHeartbeat.js";
 
 const ORKIO_ENV = (typeof window !== "undefined" && window.__ORKIO_ENV__) ? window.__ORKIO_ENV__ : {};
 const SUMMIT_VOICE_MODE = ((ORKIO_ENV.VITE_SUMMIT_VOICE_MODE || import.meta.env.VITE_SUMMIT_VOICE_MODE || "realtime").trim().toLowerCase() === "stt_tts")
@@ -229,14 +230,11 @@ export default function AppConsole() {
 
 
 // Summit presence heartbeat (keeps online status accurate)
+// P0 HOTFIX: não enviar heartbeat sem token válido e parar em 401.
 React.useEffect(() => {
-  let alive = true;
-  const tick = async () => {
-    try { await apiFetch("/api/auth/heartbeat", { method: "POST" }); } catch (_e) {}
-  };
-  tick();
-  const id = setInterval(() => { if (alive) tick(); }, 20000);
-  return () => { alive = false; clearInterval(id); };
+  return startSessionHeartbeat({
+    intervalMs: 20000,
+  });
 }, []);
   const [tenant, setTenant] = useState(getTenant() || "public");
   const [token, setToken] = useState(getToken());
