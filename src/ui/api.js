@@ -356,7 +356,22 @@ export async function transcribeAudio(
   { token, org, tenant, trace_id = null, language = null, filename = "audio.webm" } = {}
 ) {
   const fd = new FormData();
-  fd.append("file", blob, filename);
+
+  let uploadBlob = blob;
+  let uploadName = filename || "audio.webm";
+
+  try {
+    const blobType = String(blob?.type || "").toLowerCase();
+    if (blobType.startsWith("audio/webm")) {
+      uploadBlob = new Blob([blob], { type: "audio/webm" });
+      if (!/\.webm$/i.test(uploadName)) uploadName = "audio.webm";
+    } else if (blobType.startsWith("audio/mp4")) {
+      uploadBlob = new Blob([blob], { type: "audio/mp4" });
+      if (!/\.(m4a|mp4)$/i.test(uploadName)) uploadName = "audio.m4a";
+    }
+  } catch {}
+
+  fd.append("file", uploadBlob, uploadName);
   if (language) fd.append("language", language);
 
   return apiFetch("/api/audio/transcriptions", {
