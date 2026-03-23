@@ -446,7 +446,7 @@ export async function startSummitSession({
   response_profile = "stage",
   language_profile = "en",
 } = {}) {
-  const { data } = await apiFetch("/api/summit/sessions/start", {
+  const { data } = await apiFetch("/api/realtime/start", {
     method: "POST",
     token,
     org: org || tenant,
