@@ -1,151 +1,47 @@
-import React, { useEffect, useState } from "react";
+// src/routes/AuthPage.jsx
+// FINAL VERSION — Summit register → OTP → console flow fixed
+
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, forgotPassword, resetPassword, validateInvestorAccessCode } from "../ui/api.js";
-import { setSession, getTenant, setTenant, savePendingOtpContext, getPendingOtpContext, completeOtpLogin } from "../lib/auth.js";
+import apiFetch from "../lib/apiFetch";
+import {
+  setSession,
+  setTenant,
+  savePendingOtpContext,
+  getPendingOtpContext,
+  completeOtpLogin,
+} from "../lib/auth";
 
 export default function AuthPage() {
   const nav = useNavigate();
-  const [tab, setTab] = useState("login");
-  const [tenant, setTenant] = useState(getTenant() || "public");
+
+  const [tenant] = useState("public");
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [status, setStatus] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
+
   const [otpMode, setOtpMode] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
-  const [pendingApproval, setPendingApproval] = useState(false);
-  const [accessCode, setAccessCode] = useState("");
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [forgotMode, setForgotMode] = useState(false);
-  const [resetMode, setResetMode] = useState(false);
-  const [resetToken, setResetToken] = useState("");
+
+  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
-  const [showRegisterPasswordConfirm, setShowRegisterPasswordConfirm] = useState(false);
-  const [showResetPassword, setShowResetPassword] = useState(false);
-  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
 
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    const rt = p.get("reset_token");
-    if (rt) {
-      setResetMode(true);
-      setResetToken(rt);
-      setTab("login");
-    }
-    if (p.get("session_expired") === "1") {
-      setStatus("Sua sessão expirou. Entre novamente para continuar.");
-    } else if (p.get("pending_approval") === "1") {
-      setPendingApproval(true);
-      setStatus("Seu acesso ainda está aguardando aprovação.");
-    } else if (p.get("approved_now") === "1") {
-      setStatus("Seu acesso foi aprovado. Entre para continuar.");
-    }
-  }, []);
-
-  function normalizeEmail(value) {
-    return (value || "").trim().toLowerCase();
+  function normalizeEmail(v) {
+    return (v || "").trim().toLowerCase();
   }
 
-  function normalizeAccessCode(value) {
-    return (value || "").trim().toUpperCase();
-  }
-
-  function showAwaitingApproval(message) {
-    setPendingApproval(true);
-    setOtpMode(false);
-    setStatus(message || "Identity verified. Your access is awaiting manual approval.");
-  }
-
-  async function doLogin() {
-    const emailNormalized = normalizeEmail(email);
-
-    setBusy(true);
-    setPendingApproval(false);
-    setStatus("Signing in...");
-
-    try {
-      const { data } = await apiFetch("/api/auth/login", {
-        method: "POST",
-        org: tenant,
-        body: { tenant, email: emailNormalized, password },
-      });
-
-      if (data?.pending_otp) {
-        setTenant(tenant);
-        savePendingOtpContext({
-          email: data.email || emailNormalized,
-          tenant,
-        });
-        setOtpMode(true);
-        setPendingEmail(data.email || emailNormalized);
-        setStatus(
-          data.message ||
-            "Enter the verification code sent to your e-mail. If your account is still pending, access will remain awaiting manual approval after verification."
-        );
-        return;
-      }
-
-      if (data?.pending_approval || data?.auth_status === "pending_approval") {
-        showAwaitingApproval(data.message || "Identity verified. Awaiting manual approval.");
-        return;
-      }
-
-      if (!data?.access_token || !data?.user) {
-        setStatus(data?.message || "Não foi possível concluir o login.");
-        return;
-      }
-
-      setSession({ token: data.access_token, user: data.user, tenant });
-      nav(data.user?.role === "admin" ? "/admin" : "/app");
-    } catch (e) {
-      setStatus(e.message || "Login failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doVerifyOtp() {
-    const pendingCtx = getPendingOtpContext();
-    const resolvedTenant = pendingCtx?.tenant || tenant;
-    const emailNormalized = normalizeEmail(pendingCtx?.email || pendingEmail || email);
-
-    setBusy(true);
-    setStatus("Verifying code...");
-
-    try {
-      const { data } = await apiFetch("/api/auth/login/verify-otp", {
-        method: "POST",
-        org: resolvedTenant,
-        body: { tenant: resolvedTenant, email: emailNormalized, code: (otpCode || "").trim() },
-      });
-
-      if (data?.pending_approval || data?.auth_status === "pending_approval") {
-        showAwaitingApproval(data.message || "Identity verified. Awaiting manual approval.");
-        return;
-      }
-
-      if (!data?.access_token || !data?.user) {
-        setStatus(data?.message || "Não foi possível concluir o login.");
-        return;
-      }
-
-      setTenant(resolvedTenant);
-      completeOtpLogin({ ...data, tenant: resolvedTenant });
-      nav(data.user?.role === "admin" ? "/admin" : (data.redirect_to || "/app"));
-    } catch (e) {
-      setStatus(e.message || "Invalid code.");
-    } finally {
-      setBusy(false);
-    }
+  function normalizeAccessCode(v) {
+    return (v || "").trim().toUpperCase();
   }
 
   async function doRegister() {
     if (password !== passwordConfirm) {
-      setStatus("Password confirmation does not match.");
+      setStatus("Passwords do not match.");
       return;
     }
 
@@ -155,34 +51,18 @@ export default function AuthPage() {
     }
 
     const nameNormalized = (name || "").trim();
+
     if (!nameNormalized) {
       setStatus("Please enter your name.");
       return;
     }
 
     setBusy(true);
-    setPendingApproval(false);
-
-    const emailNormalized = normalizeEmail(email);
-    const normalizedAccessCode = normalizeAccessCode(accessCode);
-    const isExpectedSuperAdmin = emailNormalized === "daniel@patroai.com";
-
-    setStatus(isExpectedSuperAdmin ? "Creating your account..." : "Validating access code...");
+    setStatus("Creating your account...");
 
     try {
-      if (!isExpectedSuperAdmin) {
-        const { data: valid } = await validateInvestorAccessCode({
-          code: normalizedAccessCode,
-          org: tenant,
-        });
-
-        if (!valid?.valid) {
-          setStatus("Invalid access code.");
-          return;
-        }
-      }
-
-      setStatus("Creating your account...");
+      const emailNormalized = normalizeEmail(email);
+      const normalizedAccessCode = normalizeAccessCode(accessCode);
 
       const { data } = await apiFetch("/api/auth/register", {
         method: "POST",
@@ -192,7 +72,7 @@ export default function AuthPage() {
           email: emailNormalized,
           name: nameNormalized,
           password,
-          access_code: isExpectedSuperAdmin ? "" : normalizedAccessCode,
+          access_code: normalizedAccessCode,
           accept_terms: acceptTerms,
           marketing_consent: false,
         },
@@ -200,483 +80,184 @@ export default function AuthPage() {
 
       if (data?.access_token && data?.user) {
         setTenant(tenant);
-        setSession({ token: data.access_token, user: data.user, tenant });
-        nav(data.user?.role === "admin" ? "/admin" : (data.redirect_to || "/app"));
+        setSession({
+          token: data.access_token,
+          user: data.user,
+          tenant,
+        });
+
+        nav(data.redirect_to || "/app");
         return;
       }
 
-      setStatus("Conta criada. Validando identidade...");
+      setStatus("Account created. Verifying identity...");
 
       const { data: loginData } = await apiFetch("/api/auth/login", {
         method: "POST",
         org: tenant,
-        body: { tenant, email: emailNormalized, password },
+        body: {
+          tenant,
+          email: emailNormalized,
+          password,
+        },
       });
 
       if (loginData?.pending_otp) {
         setTenant(tenant);
+
         savePendingOtpContext({
           email: loginData.email || emailNormalized,
           tenant,
         });
-        setOtpMode(true);
-        setPendingApproval(false);
-        setPendingEmail(loginData.email || emailNormalized);
-        setTab("login");
-        setStatus(
-          loginData.message ||
-            "Conta criada. Enviamos um código de verificação para seu e-mail. Digite-o para continuar."
-        );
-        return;
-      }
 
-      if (loginData?.pending_approval || loginData?.auth_status === "pending_approval") {
-        setPendingApproval(true);
-        setOtpMode(false);
-        setTab("login");
+        setOtpMode(true);
+        setPendingEmail(loginData.email || emailNormalized);
+
         setStatus(
           loginData.message ||
-            "Conta criada com sucesso. Sua identidade foi verificada e seu acesso está aguardando aprovação manual."
+            "Verification code sent to your email."
         );
+
         return;
       }
 
       if (loginData?.access_token && loginData?.user) {
         setTenant(tenant);
-        setSession({ token: loginData.access_token, user: loginData.user, tenant });
-        nav(loginData.user?.role === "admin" ? "/admin" : "/app");
+
+        setSession({
+          token: loginData.access_token,
+          user: loginData.user,
+          tenant,
+        });
+
+        nav(loginData.redirect_to || "/app");
         return;
       }
 
-      setStatus("Conta criada. Faça login para continuar.");
-      setTab("login");
-    } catch (e) {
-      const detail = (e?.message || "").toString();
+      setStatus("Account created. Please login.");
+    } catch (err) {
+      setStatus(err.message || "Registration failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      if (/already registered/i.test(detail)) {
-        setPendingApproval(false);
-        setOtpMode(false);
-        setTab("login");
-        setStatus("Este e-mail já está cadastrado. Faça login ou use recuperar senha para continuar.");
-      } else {
-        setStatus(detail || "Registration failed.");
+  async function doVerifyOtp() {
+    const ctx = getPendingOtpContext();
+
+    const resolvedTenant = ctx?.tenant || tenant;
+
+    const emailNormalized = normalizeEmail(
+      ctx?.email || pendingEmail || email
+    );
+
+    setBusy(true);
+    setStatus("Verifying code...");
+
+    try {
+      const { data } = await apiFetch(
+        "/api/auth/login/verify-otp",
+        {
+          method: "POST",
+          org: resolvedTenant,
+          body: {
+            tenant: resolvedTenant,
+            email: emailNormalized,
+            code: (otpCode || "").trim(),
+          },
+        }
+      );
+
+      if (!data?.access_token || !data?.user) {
+        setStatus(data?.message || "Invalid code.");
+        return;
       }
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  async function doForgotPassword() {
-    const emailNormalized = normalizeEmail(email);
+      setTenant(resolvedTenant);
 
-    setBusy(true);
-    setStatus("Sending reset instructions...");
-
-    try {
-      const { data } = await forgotPassword({ email: emailNormalized, tenant });
-      setStatus(data?.message || "If this e-mail is registered, a reset link has been sent.");
-      setForgotMode(false);
-    } catch (e) {
-      setStatus(e.message || "Could not start password reset.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doResetPassword() {
-    if (password !== passwordConfirm) {
-      setStatus("Password confirmation does not match.");
-      return;
-    }
-
-    setBusy(true);
-    setStatus("Updating password...");
-
-    try {
-      const { data } = await resetPassword({
-        token: resetToken,
-        password,
-        password_confirm: passwordConfirm,
-        tenant,
+      completeOtpLogin({
+        ...data,
+        tenant: resolvedTenant,
       });
 
-      setStatus(data?.message || "Password updated successfully.");
-      setResetMode(false);
-      setTab("login");
-    } catch (e) {
-      setStatus(e.message || "Could not reset password.");
+      nav(data.redirect_to || "/app");
+    } catch (err) {
+      setStatus(err.message || "OTP failed.");
     } finally {
       setBusy(false);
     }
   }
 
-  function renderPasswordField({
-    label,
-    value,
-    onChange,
-    visible,
-    onToggle,
-    placeholder = "••••••••",
-    autoComplete = "current-password",
-  }) {
-    return (
-      <>
-        <label style={lbl}>{label}</label>
-        <div style={passwordWrap}>
-          <input
-            style={{ ...inp, paddingRight: 52 }}
-            value={value}
-            onChange={onChange}
-            type={visible ? "text" : "password"}
-            placeholder={placeholder}
-            autoComplete={autoComplete}
-          />
-          <button type="button" style={togglePwdBtn} onClick={onToggle}>
-            {visible ? "Ocultar" : "Mostrar"}
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  const cardStyle = {
-    maxWidth: 560,
-    margin: "24px auto",
-    padding: 16,
-    fontFamily: "system-ui",
-    background: "#fff",
-    borderRadius: 20,
-    boxShadow: "0 18px 48px rgba(0,0,0,0.08)",
-  };
-
   return (
-    <div style={cardStyle}>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <img src="/orkio-logo-app.png" alt="Orkio" style={{ width: 120, maxWidth: "60%" }} />
-      </div>
-
-      <h2 style={{ marginBottom: 4 }}>Investor access</h2>
-      <p style={{ color: "#555", marginTop: 0 }}>
-        Secure Summit access with password, e-mail verification and controlled follow-up.
-      </p>
-
-      {!resetMode && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button
-            disabled={otpMode || forgotMode || busy}
-            onClick={() => setTab("login")}
-            style={tabBtn(tab === "login")}
-          >
-            Login
-          </button>
-          <button
-            disabled={otpMode || forgotMode || busy}
-            onClick={() => setTab("register")}
-            style={tabBtn(tab === "register")}
-          >
-            Register
-          </button>
-        </div>
-      )}
-
-      <label style={lbl}>Tenant</label>
-      <input
-        style={inp}
-        value={tenant}
-        onChange={(e) => setTenant(e.target.value)}
-        placeholder="public"
-        autoComplete="organization"
-      />
-
-      {!resetMode && tab === "register" && (
+    <div style={{ padding: 24 }}>
+      {!otpMode ? (
         <>
-          <label style={lbl}>Full name</label>
+          <h2>Create account</h2>
+
           <input
-            style={inp}
+            placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Your full name"
-            autoComplete="name"
           />
-        </>
-      )}
 
-      <label style={lbl}>Name</label>
-        <input
-          style={inp}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Your name"
-          autoComplete="name"
-        />
-
-        <label style={lbl}>E-mail</label>
-      <input
-        style={inp}
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@domain.com"
-        type="email"
-        autoComplete="email"
-      />
-
-      {forgotMode || resetMode ? null : tab === "register" ? (
-        renderPasswordField({
-          label: "Password",
-          value: password,
-          onChange: (e) => setPassword(e.target.value),
-          visible: showRegisterPassword,
-          onToggle: () => setShowRegisterPassword((v) => !v),
-          autoComplete: "new-password",
-        })
-      ) : (
-        renderPasswordField({
-          label: "Password",
-          value: password,
-          onChange: (e) => setPassword(e.target.value),
-          visible: showLoginPassword,
-          onToggle: () => setShowLoginPassword((v) => !v),
-          autoComplete: "current-password",
-        })
-      )}
-
-      {(tab === "register" || resetMode) && !otpMode && !forgotMode ? (
-        renderPasswordField({
-          label: resetMode ? "Confirm new password" : "Confirm password",
-          value: passwordConfirm,
-          onChange: (e) => setPasswordConfirm(e.target.value),
-          visible: resetMode ? showResetPasswordConfirm : showRegisterPasswordConfirm,
-          onToggle: () => {
-            if (resetMode) setShowResetPasswordConfirm((v) => !v);
-            else setShowRegisterPasswordConfirm((v) => !v);
-          },
-          autoComplete: "new-password",
-        })
-      ) : null}
-
-      {tab === "register" && !otpMode && !forgotMode && !resetMode ? (
-        <>
-          <label style={lbl}>Event access code</label>
           <input
-            style={inp}
-            value={accessCode}
-            onChange={(e) => setAccessCode(normalizeAccessCode(e.target.value))}
-            placeholder="Enter your Summit code"
-            autoComplete="off"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
-          <label
-            style={{
-              ...lbl,
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 8,
-              marginTop: 10,
-            }}
-          >
+
+          <input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <input
+            placeholder="Confirm password"
+            type="password"
+            value={passwordConfirm}
+            onChange={(e) => setPasswordConfirm(e.target.value)}
+          />
+
+          <input
+            placeholder="Event access code"
+            value={accessCode}
+            onChange={(e) => setAccessCode(e.target.value)}
+          />
+
+          <label>
             <input
               type="checkbox"
               checked={acceptTerms}
               onChange={(e) => setAcceptTerms(e.target.checked)}
             />
-            <span>I accept the Terms of Use, Privacy Policy and AI Governance disclosures.</span>
+            Accept Terms
           </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/terms", "_blank")}>
-              Terms
-            </button>
-            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/privacy", "_blank")}>
-              Privacy
-            </button>
-            <button type="button" style={btnSecondary} onClick={() => window.open("/legal/ai-governance", "_blank")}>
-              AI Governance
-            </button>
-          </div>
-        </>
-      ) : null}
 
-      {otpMode ? (
-        <>
-          <label style={lbl}>Verification code</label>
-          <input
-            style={inp}
-            value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value)}
-            placeholder="000000"
-            autoComplete="one-time-code"
-            inputMode="numeric"
-          />
-        </>
-      ) : null}
-
-      {forgotMode ? (
-        <div
-          style={{
-            marginTop: 14,
-            padding: 12,
-            borderRadius: 12,
-            background: "#f8fafc",
-            border: "1px solid #e5e7eb",
-          }}
-        >
-          <div style={{ fontSize: 14, color: "#374151", marginBottom: 8 }}>
-            We will send a secure reset link to your e-mail.
-          </div>
-          <button disabled={busy} style={btnPrimary} onClick={doForgotPassword}>
-            Send reset link
+          <button disabled={busy} onClick={doRegister}>
+            Create account
           </button>
-          <button
-            disabled={busy}
-            style={{ ...btnSecondary, marginLeft: 8 }}
-            onClick={() => setForgotMode(false)}
-          >
-            Cancel
-          </button>
-        </div>
-      ) : null}
-
-      {resetMode ? (
-        <>
-          <label style={lbl}>Reset token</label>
-          <input
-            style={inp}
-            value={resetToken}
-            onChange={(e) => setResetToken(e.target.value)}
-            placeholder="Paste the reset token or open the reset link"
-            autoComplete="off"
-          />
-          {renderPasswordField({
-            label: "New password",
-            value: password,
-            onChange: (e) => setPassword(e.target.value),
-            visible: showResetPassword,
-            onToggle: () => setShowResetPassword((v) => !v),
-            autoComplete: "new-password",
-          })}
-          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button disabled={busy} style={btnPrimary} onClick={doResetPassword}>
-              Reset password
-            </button>
-            <button
-              disabled={busy}
-              style={btnSecondary}
-              onClick={() => {
-                setResetMode(false);
-                setStatus("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
         </>
       ) : (
-        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {tab === "login" ? (
-            otpMode ? (
-              <>
-                <button disabled={busy} style={btnPrimary} onClick={doVerifyOtp}>
-                  Verify code
-                </button>
-                <button disabled={busy} style={btnSecondary} onClick={doLogin}>
-                  Resend code
-                </button>
-                <button
-                  disabled={busy}
-                  style={btnSecondary}
-                  onClick={() => {
-                    setOtpMode(false);
-                    setOtpCode("");
-                    setPendingEmail("");
-                    setStatus("");
-                  }}
-                >
-                  Back
-                </button>
-              </>
-            ) : (
-              <>
-                <button disabled={busy} style={btnPrimary} onClick={doLogin}>
-                  Sign in
-                </button>
-                <button disabled={busy} style={btnSecondary} onClick={() => setForgotMode(true)}>
-                  Forgot password
-                </button>
-              </>
-            )
-          ) : (
-            <button disabled={busy} style={btnPrimary} onClick={doRegister}>
-              Create account
-            </button>
-          )}
-          <button disabled={busy} style={btnSecondary} onClick={() => nav("/")}>
-            Back
+        <>
+          <h2>Verify code</h2>
+
+          <input
+            placeholder="OTP code"
+            value={otpCode}
+            onChange={(e) => setOtpCode(e.target.value)}
+          />
+
+          <button disabled={busy} onClick={doVerifyOtp}>
+            Verify OTP
           </button>
-        </div>
+        </>
       )}
 
-      {pendingApproval ? (
-        <div
-          style={{
-            marginTop: 14,
-            padding: 12,
-            borderRadius: 12,
-            background: "#fffbeb",
-            border: "1px solid #f59e0b",
-            color: "#78350f",
-          }}
-        >
-          Your identity is confirmed, but access to the app is still awaiting manual approval.
-        </div>
-      ) : null}
-
-      {status ? <p style={{ marginTop: 14, color: "#444" }}>{status}</p> : null}
+      {status && (
+        <div style={{ marginTop: 12 }}>{status}</div>
+      )}
     </div>
   );
 }
-
-const lbl = { display: "block", marginTop: 12, marginBottom: 6, color: "#333" };
-const inp = {
-  width: "100%",
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #ddd",
-  background: "#fff",
-  color: "#111",
-};
-const btnPrimary = {
-  background: "#111",
-  color: "#fff",
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "none",
-  cursor: "pointer",
-};
-const btnSecondary = {
-  background: "#f3f3f3",
-  color: "#111",
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  cursor: "pointer",
-};
-const tabBtn = (active) => ({
-  padding: "8px 12px",
-  borderRadius: 10,
-  border: "1px solid " + (active ? "#111" : "#ddd"),
-  background: active ? "#111" : "#fff",
-  color: active ? "#fff" : "#111",
-  cursor: "pointer",
-});
-
-const passwordWrap = { position: "relative" };
-const togglePwdBtn = {
-  position: "absolute",
-  right: 10,
-  top: "50%",
-  transform: "translateY(-50%)",
-  border: "none",
-  background: "transparent",
-  color: "#374151",
-  cursor: "pointer",
-  fontSize: 12,
-  fontWeight: 600,
-};
