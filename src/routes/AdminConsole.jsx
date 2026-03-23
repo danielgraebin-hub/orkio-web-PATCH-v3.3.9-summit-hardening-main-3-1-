@@ -616,18 +616,6 @@ async function openKnowledgeModal(agent) {
                             <div className="text-[11px] uppercase tracking-wide text-white/45">Intent</div>
                             <div className="mt-1 text-sm text-white/85">{u.intent || "-"}</div>
                           </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-                            <div className="text-[11px] uppercase tracking-wide text-white/45">Usage tier</div>
-                            <div className="mt-1 text-sm text-white/85">{u.usage_tier || "-"}</div>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-                            <div className="text-[11px] uppercase tracking-wide text-white/45">Signup source</div>
-                            <div className="mt-1 text-sm text-white/85">{u.signup_source || "-"}</div>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
-                            <div className="text-[11px] uppercase tracking-wide text-white/45">Signup code</div>
-                            <div className="mt-1 text-sm text-white/85">{u.signup_code_label || "-"}</div>
-                          </div>
                         </div>
                         {u.notes ? (
                           <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white/80">
