@@ -709,7 +709,7 @@ async function submitOnboarding() {
 
   async function doLogout() {
     try {
-      await logout({ org });
+      await logout({ org: tenant, token });
     } finally {
       clearSession();
       nav("/auth");
@@ -2501,68 +2501,120 @@ async function stopRealtime(reason = 'client_stop') {
 
 {onboardingOpen && (
   <div style={styles.modalBack} onClick={(e) => e.stopPropagation()}>
-    <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-      <div style={styles.modalTitle}>Complete seu onboarding</div>
-      <div style={styles.hint}>
+    <div
+      style={{
+        ...styles.modal,
+        width: "100%",
+        maxWidth: 760,
+        padding: isMobile ? 18 : 24,
+        borderRadius: 24,
+        background: "linear-gradient(180deg, rgba(17,24,39,0.98), rgba(3,7,18,0.98))",
+        border: "1px solid rgba(255,255,255,0.12)",
+        boxShadow: "0 28px 80px rgba(0,0,0,0.38)",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)", marginBottom: 8 }}>
+        Summit private mode
+      </div>
+      <div style={{ fontSize: isMobile ? 24 : 30, fontWeight: 900, lineHeight: 1.05, marginBottom: 8 }}>
+        Complete seu onboarding
+      </div>
+      <div style={{ ...styles.hint, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
         Antes de continuar, precisamos de algumas informações para personalizar sua experiência no Summit.
       </div>
 
-      <label style={{ ...styles.hint, display: "block", marginTop: 12 }}>Empresa</label>
-      <input
-        style={styles.input}
-        value={onboardingForm.company}
-        onChange={(e) => setOnboardingForm((prev) => ({ ...prev, company: e.target.value }))}
-        placeholder="Nome da empresa"
-      />
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginTop: 18 }}>
+        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Empresa</label>
+          <input
+            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            value={onboardingForm.company}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, company: e.target.value }))}
+            placeholder="Nome da empresa"
+          />
+        </div>
 
-      <label style={{ ...styles.hint, display: "block", marginTop: 10 }}>Seu papel</label>
-      <input
-        style={styles.input}
-        value={onboardingForm.role}
-        onChange={(e) => setOnboardingForm((prev) => ({ ...prev, role: e.target.value }))}
-        placeholder="Ex.: Founder, CTO, Investidor"
-      />
+        <div>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Seu papel</label>
+          <input
+            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            value={onboardingForm.role}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, role: e.target.value }))}
+            placeholder="Founder, CTO, Investidor..."
+          />
+        </div>
 
-      <label style={{ ...styles.hint, display: "block", marginTop: 10 }}>Perfil *</label>
-      <select
-        style={styles.select}
-        value={onboardingForm.user_type}
-        onChange={(e) => setOnboardingForm((prev) => ({ ...prev, user_type: e.target.value }))}
-      >
-        <option value="">Selecione</option>
-        {ONBOARDING_USER_TYPES.map((item) => (
-          <option key={item.value} value={item.value}>{item.label}</option>
-        ))}
-      </select>
+        <div>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Perfil *</label>
+          <select
+            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            value={onboardingForm.user_type}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, user_type: e.target.value }))}
+          >
+            <option value="">Selecione</option>
+            {ONBOARDING_USER_TYPES.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </div>
 
-      <label style={{ ...styles.hint, display: "block", marginTop: 10 }}>Objetivo principal *</label>
-      <select
-        style={styles.select}
-        value={onboardingForm.intent}
-        onChange={(e) => setOnboardingForm((prev) => ({ ...prev, intent: e.target.value }))}
-      >
-        <option value="">Selecione</option>
-        {ONBOARDING_INTENTS.map((item) => (
-          <option key={item.value} value={item.value}>{item.label}</option>
-        ))}
-      </select>
+        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Objetivo principal *</label>
+          <select
+            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            value={onboardingForm.intent}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, intent: e.target.value }))}
+          >
+            <option value="">Selecione</option>
+            {ONBOARDING_INTENTS.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </div>
 
-      <label style={{ ...styles.hint, display: "block", marginTop: 10 }}>Contexto adicional</label>
-      <textarea
-        style={{ ...styles.input, minHeight: 100, resize: "vertical" }}
-        value={onboardingForm.notes}
-        onChange={(e) => setOnboardingForm((prev) => ({ ...prev, notes: e.target.value }))}
-        placeholder="Conte em uma frase o que você quer resolver ou explorar."
-      />
+        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Contexto adicional</label>
+          <textarea
+            style={{ ...styles.input, minHeight: 110, resize: "vertical", background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            value={onboardingForm.notes}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, notes: e.target.value }))}
+            placeholder="Conte em uma frase o que você quer resolver ou explorar."
+          />
+        </div>
+      </div>
 
       {onboardingStatus ? (
-        <div style={{ marginTop: 10, fontSize: 13, color: "rgba(255,255,255,0.78)" }}>{onboardingStatus}</div>
+        <div
+          style={{
+            marginTop: 14,
+            fontSize: 14,
+            color: "#fff",
+            borderRadius: 14,
+            padding: "12px 14px",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          {onboardingStatus}
+        </div>
       ) : null}
 
-      <div style={styles.modalActions}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 18, flexDirection: isMobile ? "column" : "row" }}>
+        <div style={{ color: "rgba(255,255,255,0.62)", fontSize: 13 }}>
+          Este passo aparece apenas uma vez após seu acesso aprovado.
+        </div>
         <button
           type="button"
-          style={{ ...styles.btn, ...styles.btnPrimary, opacity: onboardingBusy ? 0.75 : 1 }}
+          style={{
+            ...styles.btn,
+            ...styles.btnPrimary,
+            opacity: onboardingBusy ? 0.75 : 1,
+            minWidth: isMobile ? "100%" : 220,
+            minHeight: 50,
+            fontSize: 16,
+            fontWeight: 800,
+          }}
           onClick={submitOnboarding}
           disabled={onboardingBusy}
         >
