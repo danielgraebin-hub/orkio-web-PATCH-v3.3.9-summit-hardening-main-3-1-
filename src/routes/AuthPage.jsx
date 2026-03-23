@@ -148,69 +148,53 @@ export default function AuthPage() {
           marketing_consent: false,
         },
       });
-      if (data?.pending_otp) {
+      if (data?.access_token && data?.user) {
+        setSession({ token: data.access_token, user: data.user, tenant });
+        nav(data.user?.role === "admin" ? "/admin" : "/app");
+        return;
+      }
+
+      // P0 HOTFIX:
+      // register does not emit OTP directly in the backend.
+      // To force OTP right after signup, immediately perform the normal login flow.
+      setStatus("Conta criada. Validando identidade...");
+      const { data: loginData } = await apiFetch("/api/auth/login", {
+        method: "POST",
+        org: tenant,
+        body: { tenant, email: emailNormalized, password },
+      });
+
+      if (loginData?.pending_otp) {
         setOtpMode(true);
-        setPendingEmail(data.email || emailNormalized);
+        setPendingApproval(false);
+        setPendingEmail(loginData.email || emailNormalized);
+        setTab("login");
         setStatus(
-          data.message ||
-          "Conta criada. Digite o código enviado ao seu e-mail para concluir a validação."
+          loginData.message ||
+          "Conta criada. Enviamos um código de verificação para seu e-mail. Digite-o para continuar."
         );
         return;
       }
 
-      if (data?.pending_approval || !data?.access_token) {
-        setStatus("Conta criada. Solicitando código OTP para validar sua identidade...");
-        try {
-          const { data: loginData } = await apiFetch("/api/auth/login", {
-            method: "POST",
-            org: tenant,
-            body: { tenant, email: emailNormalized, password },
-          });
-
-          if (loginData?.pending_otp) {
-            setOtpMode(true);
-            setPendingApproval(Boolean(data?.pending_approval || loginData?.pending_approval));
-            setPendingEmail(loginData.email || emailNormalized);
-            setTab("login");
-            setStatus(
-              loginData.message ||
-              "Conta criada. Digite o código enviado ao seu e-mail para concluir a validação."
-            );
-            return;
-          }
-
-          if (loginData?.pending_approval || loginData?.auth_status === "pending_approval") {
-            setPendingApproval(true);
-            setTab("login");
-            setStatus(loginData.message || data.message || "Conta criada. Seu acesso está aguardando aprovação manual.");
-            return;
-          }
-
-          if (loginData?.access_token && loginData?.user) {
-            setSession({ token: loginData.access_token, user: loginData.user, tenant });
-            nav(loginData.user?.role === "admin" ? "/admin" : "/app");
-            return;
-          }
-        } catch (otpErr) {
-          const otpMsg = (otpErr?.message || "").toString();
-          setPendingApproval(Boolean(data?.pending_approval));
-          setTab("login");
-          setStatus(
-            otpMsg ||
-            data.message ||
-            "Conta criada. Faça login para receber o código OTP."
-          );
-          return;
-        }
-      }
-
-      if (data?.access_token) {
-        setSession({ token: data.access_token, user: data.user, tenant });
-        nav(data.user?.role === "admin" ? "/admin" : "/app");
-      } else {
-        setStatus("Account created. Please sign in.");
+      if (loginData?.pending_approval || loginData?.auth_status === "pending_approval") {
+        setPendingApproval(true);
+        setOtpMode(false);
         setTab("login");
+        setStatus(
+          loginData.message ||
+          "Conta criada com sucesso. Sua identidade foi verificada e seu acesso está aguardando aprovação manual."
+        );
+        return;
       }
+
+      if (loginData?.access_token && loginData?.user) {
+        setSession({ token: loginData.access_token, user: loginData.user, tenant });
+        nav(loginData.user?.role === "admin" ? "/admin" : "/app");
+        return;
+      }
+
+      setStatus("Conta criada. Faça login para continuar.");
+      setTab("login");
     } catch (e) {
       const detail = (e?.message || "").toString();
       if (/already registered/i.test(detail)) {
