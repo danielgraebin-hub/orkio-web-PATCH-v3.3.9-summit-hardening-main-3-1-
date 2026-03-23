@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, forgotPassword, resetPassword, validateInvestorAccessCode } from "../ui/api.js";
-import { setSession, getTenant } from "../lib/auth.js";
+import { setSession, getTenant, setTenant, savePendingOtpContext, completeOtpLogin } from "../lib/auth.js";
 
 export default function AuthPage() {
   const nav = useNavigate();
@@ -75,6 +75,11 @@ export default function AuthPage() {
       });
 
       if (data?.pending_otp) {
+        setTenant(tenant);
+        savePendingOtpContext({
+          email: data.email || emailNormalized,
+          tenant,
+        });
         setOtpMode(true);
         setPendingEmail(data.email || emailNormalized);
         setStatus(
@@ -94,6 +99,7 @@ export default function AuthPage() {
         return;
       }
 
+      setTenant(tenant);
       setSession({ token: data.access_token, user: data.user, tenant });
       nav(data.user?.role === "admin" ? "/admin" : "/app");
     } catch (e) {
@@ -104,7 +110,8 @@ export default function AuthPage() {
   }
 
   async function doVerifyOtp() {
-    const emailNormalized = normalizeEmail(pendingEmail || email);
+    const pendingCtx = window?.localStorage ? JSON.parse(localStorage.getItem("orkio_pending_otp") || "null") : null;
+    const emailNormalized = normalizeEmail((pendingCtx?.email) || pendingEmail || email);
 
     setBusy(true);
     setStatus("Verifying code...");
@@ -112,8 +119,8 @@ export default function AuthPage() {
     try {
       const { data } = await apiFetch("/api/auth/login/verify-otp", {
         method: "POST",
-        org: tenant,
-        body: { tenant, email: emailNormalized, code: (otpCode || "").trim() },
+        org: (pendingCtx?.tenant || tenant),
+        body: { tenant: (pendingCtx?.tenant || tenant), email: emailNormalized, code: (otpCode || "").trim() },
       });
 
       if (data?.pending_approval || data?.auth_status === "pending_approval") {
@@ -126,8 +133,9 @@ export default function AuthPage() {
         return;
       }
 
-      setSession({ token: data.access_token, user: data.user, tenant });
-      nav(data.user?.role === "admin" ? "/admin" : "/app");
+      setTenant((pendingCtx?.tenant || tenant));
+      completeOtpLogin({ ...data, tenant: (pendingCtx?.tenant || tenant) });
+      nav(data.user?.role === "admin" ? "/admin" : (data.redirect_to || "/app"));
     } catch (e) {
       setStatus(e.message || "Invalid code.");
     } finally {
@@ -185,6 +193,7 @@ export default function AuthPage() {
       });
 
       if (data?.access_token && data?.user) {
+        setTenant(tenant);
         setSession({ token: data.access_token, user: data.user, tenant });
         nav(data.user?.role === "admin" ? "/admin" : "/app");
         return;
@@ -202,6 +211,11 @@ export default function AuthPage() {
       });
 
       if (loginData?.pending_otp) {
+        setTenant(tenant);
+        savePendingOtpContext({
+          email: loginData.email || emailNormalized,
+          tenant,
+        });
         setOtpMode(true);
         setPendingApproval(false);
         setPendingEmail(loginData.email || emailNormalized);
@@ -225,6 +239,7 @@ export default function AuthPage() {
       }
 
       if (loginData?.access_token && loginData?.user) {
+        setTenant(tenant);
         setSession({ token: loginData.access_token, user: loginData.user, tenant });
         nav(loginData.user?.role === "admin" ? "/admin" : "/app");
         return;
