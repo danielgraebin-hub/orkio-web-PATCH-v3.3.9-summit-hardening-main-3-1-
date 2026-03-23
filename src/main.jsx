@@ -22,6 +22,7 @@ import AiGovernance from "./routes/legal/AiGovernance.jsx";
 function RequireApproved({ children }) {
   const token = getToken();
   const user = getUser();
+
   const summitApproved =
     !!user &&
     (
