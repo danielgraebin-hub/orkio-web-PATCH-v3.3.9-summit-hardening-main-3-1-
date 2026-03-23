@@ -22,8 +22,18 @@ import AiGovernance from "./routes/legal/AiGovernance.jsx";
 function RequireApproved({ children }) {
   const token = getToken();
   const user = getUser();
+  const summitApproved =
+    !!user &&
+    (
+      user.role === "admin" ||
+      !!user.approved_at ||
+      String(user.usage_tier || "").startsWith("summit_") ||
+      String(user.signup_source || "").toLowerCase() === "investor" ||
+      String(user.signup_code_label || "").toLowerCase() === "efata777"
+    );
+
   if (!token) return <Navigate to="/auth" replace />;
-  if (!isApproved(user)) return <Navigate to="/auth" replace />;
+  if (!summitApproved) return <Navigate to="/auth" replace />;
   return children;
 }
 
