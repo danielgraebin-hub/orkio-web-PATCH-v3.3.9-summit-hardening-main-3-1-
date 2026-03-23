@@ -190,6 +190,26 @@ const ONBOARDING_INTENTS = [
   { value: "other", label: "Outro" },
 ];
 
+const ONBOARDING_COUNTRIES = [
+  { value: "BR", label: "Brasil" },
+  { value: "US", label: "Estados Unidos" },
+  { value: "ES", label: "Espanha" },
+  { value: "PT", label: "Portugal" },
+  { value: "AR", label: "Argentina" },
+  { value: "MX", label: "México" },
+  { value: "CO", label: "Colômbia" },
+  { value: "CL", label: "Chile" },
+  { value: "UY", label: "Uruguai" },
+  { value: "OTHER", label: "Outro" },
+];
+
+const ONBOARDING_LANGUAGES = [
+  { value: "pt-BR", label: "Português (Brasil)" },
+  { value: "en-US", label: "English (US)" },
+  { value: "es-ES", label: "Español" },
+  { value: "pt-PT", label: "Português (Portugal)" },
+];
+
 function normalizeOnboardingUserType(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
@@ -229,6 +249,9 @@ function sanitizeOnboardingForm(data) {
     role: String(data?.role || data?.profile_role || "").trim(),
     user_type: normalizeOnboardingUserType(data?.user_type),
     intent: normalizeOnboardingIntent(data?.intent),
+    country: String(data?.country || "").trim(),
+    language: String(data?.language || "").trim(),
+    whatsapp: String(data?.whatsapp || "").trim(),
     notes: String(data?.notes || "").trim(),
   };
 }
@@ -627,8 +650,8 @@ useEffect(() => {
 async function submitOnboarding() {
   if (onboardingBusy) return;
   const payload = sanitizeOnboardingForm(onboardingForm);
-  if (!payload.user_type || !payload.intent) {
-    setOnboardingStatus("Preencha pelo menos seu perfil e objetivo.");
+  if (!payload.user_type || !payload.intent || !payload.country || !payload.language) {
+    setOnboardingStatus("Preencha perfil, objetivo, país e idioma para continuar.");
     return;
   }
   setOnboardingBusy(true);
@@ -2513,32 +2536,32 @@ async function stopRealtime(reason = 'client_stop') {
   <div style={styles.modalBack} onClick={(e) => e.stopPropagation()}>
     <div
       style={{
-        ...styles.modal,
         width: "100%",
-        maxWidth: 760,
-        padding: isMobile ? 18 : 24,
-        borderRadius: 24,
-        background: "linear-gradient(180deg, rgba(17,24,39,0.98), rgba(3,7,18,0.98))",
-        border: "1px solid rgba(255,255,255,0.12)",
-        boxShadow: "0 28px 80px rgba(0,0,0,0.38)",
+        maxWidth: 820,
+        padding: isMobile ? 20 : 28,
+        borderRadius: 28,
+        background: "#f8fafc",
+        color: "#0f172a",
+        border: "1px solid rgba(15,23,42,0.08)",
+        boxShadow: "0 28px 80px rgba(15,23,42,0.22)",
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)", marginBottom: 8 }}>
+      <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#475569", marginBottom: 8, fontWeight: 800 }}>
         Summit private mode
       </div>
-      <div style={{ fontSize: isMobile ? 24 : 30, fontWeight: 900, lineHeight: 1.05, marginBottom: 8 }}>
+      <div style={{ fontSize: isMobile ? 26 : 34, fontWeight: 900, lineHeight: 1.05, marginBottom: 8 }}>
         Complete seu onboarding
       </div>
-      <div style={{ ...styles.hint, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
-        Antes de continuar, precisamos de algumas informações para personalizar sua experiência no Summit.
+      <div style={{ color: "#475569", lineHeight: 1.6, fontSize: 15 }}>
+        Antes de continuar, precisamos de algumas informações para personalizar a experiência, o idioma e o acompanhamento comercial.
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginTop: 18 }}>
-        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Empresa</label>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginTop: 20 }}>
+        <div>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Empresa</label>
           <input
-            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            style={{ ...styles.input, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
             value={onboardingForm.company}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, company: e.target.value }))}
             placeholder="Nome da empresa"
@@ -2546,19 +2569,19 @@ async function stopRealtime(reason = 'client_stop') {
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Seu papel</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Seu papel</label>
           <input
-            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            style={{ ...styles.input, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
             value={onboardingForm.role}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, role: e.target.value }))}
-            placeholder="Founder, CTO, Investidor..."
+            placeholder="Founder, CEO, CTO, Investidor..."
           />
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Perfil *</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Perfil *</label>
           <select
-            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
             value={onboardingForm.user_type}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, user_type: e.target.value }))}
           >
@@ -2569,10 +2592,10 @@ async function stopRealtime(reason = 'client_stop') {
           </select>
         </div>
 
-        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Objetivo principal *</label>
+        <div>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Objetivo principal *</label>
           <select
-            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
             value={onboardingForm.intent}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, intent: e.target.value }))}
           >
@@ -2583,10 +2606,48 @@ async function stopRealtime(reason = 'client_stop') {
           </select>
         </div>
 
+        <div>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>País *</label>
+          <select
+            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            value={onboardingForm.country || ""}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, country: e.target.value }))}
+          >
+            <option value="">Selecione</option>
+            {ONBOARDING_COUNTRIES.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Idioma *</label>
+          <select
+            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            value={onboardingForm.language || ""}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, language: e.target.value }))}
+          >
+            <option value="">Selecione</option>
+            {ONBOARDING_LANGUAGES.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </div>
+
         <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 700 }}>Contexto adicional</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>WhatsApp</label>
+          <input
+            style={{ ...styles.input, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            value={onboardingForm.whatsapp || ""}
+            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, whatsapp: e.target.value }))}
+            placeholder="+55 51 99999-9999"
+          />
+        </div>
+
+        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
+          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Contexto adicional</label>
           <textarea
-            style={{ ...styles.input, minHeight: 110, resize: "vertical", background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff" }}
+            style={{ ...styles.input, minHeight: 120, resize: "vertical", background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
             value={onboardingForm.notes}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, notes: e.target.value }))}
             placeholder="Conte em uma frase o que você quer resolver ou explorar."
@@ -2597,21 +2658,21 @@ async function stopRealtime(reason = 'client_stop') {
       {onboardingStatus ? (
         <div
           style={{
-            marginTop: 14,
+            marginTop: 16,
             fontSize: 14,
-            color: "#fff",
-            borderRadius: 14,
+            color: "#1e3a8a",
+            borderRadius: 16,
             padding: "12px 14px",
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.12)",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
           }}
         >
           {onboardingStatus}
         </div>
       ) : null}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 18, flexDirection: isMobile ? "column" : "row" }}>
-        <div style={{ color: "rgba(255,255,255,0.62)", fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 20, flexDirection: isMobile ? "column" : "row" }}>
+        <div style={{ color: "#64748b", fontSize: 13 }}>
           Este passo aparece apenas uma vez após seu acesso aprovado.
         </div>
         <button
@@ -2620,10 +2681,12 @@ async function stopRealtime(reason = 'client_stop') {
             ...styles.btn,
             ...styles.btnPrimary,
             opacity: onboardingBusy ? 0.75 : 1,
-            minWidth: isMobile ? "100%" : 220,
-            minHeight: 50,
+            minWidth: isMobile ? "100%" : 240,
+            minHeight: 52,
             fontSize: 16,
             fontWeight: 800,
+            background: "linear-gradient(135deg, #2563eb, #0f172a)",
+            color: "#fff",
           }}
           onClick={submitOnboarding}
           disabled={onboardingBusy}
