@@ -44,13 +44,6 @@ function buildRuntimeEnv() {
     WHATSAPP_PHONE_E164: (cleanEnv(process.env.VITE_WHATSAPP_PHONE_E164) || cleanEnv(process.env.WHATSAPP_PHONE_E164) || "").replace(/\D/g, ""),
     VITE_SUMMIT_VOICE_MODE: cleanEnv(process.env.VITE_SUMMIT_VOICE_MODE) || cleanEnv(process.env.SUMMIT_VOICE_MODE) || "realtime",
     VITE_SPEECH_RECOGNITION_LANG: cleanEnv(process.env.VITE_SPEECH_RECOGNITION_LANG) || cleanEnv(process.env.SPEECH_RECOGNITION_LANG) || "en-US",
-    VITE_REALTIME_MODEL: cleanEnv(process.env.VITE_REALTIME_MODEL) || cleanEnv(process.env.OPENAI_REALTIME_MODEL) || "",
-    VITE_REALTIME_TRANSCRIBE_LANGUAGE: cleanEnv(process.env.VITE_REALTIME_TRANSCRIBE_LANGUAGE) || cleanEnv(process.env.OPENAI_REALTIME_TRANSCRIBE_LANGUAGE) || "",
-    VITE_STT_LANGUAGE: cleanEnv(process.env.VITE_STT_LANGUAGE) || cleanEnv(process.env.OPENAI_STT_LANGUAGE) || "",
-    VITE_REALTIME_AUTO_RESPONSE_ENABLED: String(cleanEnv(process.env.VITE_REALTIME_AUTO_RESPONSE_ENABLED) || cleanEnv(process.env.OPENAI_REALTIME_AUTO_RESPONSE_ENABLED) || "true"),
-    VITE_REALTIME_VAD_SILENCE_MS: cleanEnv(process.env.VITE_REALTIME_VAD_SILENCE_MS) || cleanEnv(process.env.OPENAI_REALTIME_VAD_SILENCE_MS) || "",
-    VITE_REALTIME_VAD_HOLD_MS: cleanEnv(process.env.VITE_REALTIME_VAD_HOLD_MS) || cleanEnv(process.env.OPENAI_REALTIME_VAD_PREFIX_PADDING_MS) || "",
-    VITE_REALTIME_VOICE: cleanEnv(process.env.VITE_REALTIME_VOICE) || cleanEnv(process.env.OPENAI_REALTIME_VOICE_DEFAULT) || "",
     USE_API_PROXY: String(useProxy),
   };
 }
