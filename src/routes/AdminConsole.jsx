@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { apiFetch, uploadFile, joinApi, headers } from "../ui/api.js";
 import { getTenant, getToken, getUser, isAdmin } from "../lib/auth.js";
 import { ORKIO_VOICES } from "../lib/voices.js";
-import { startSessionHeartbeat } from "../lib/sessionHeartbeat.js";
 
 function Badge({ children }) {
   return (
@@ -52,11 +51,14 @@ export default function AdminConsole() {
 
 
 // Summit presence heartbeat (keeps online status accurate)
-// P0 HOTFIX: não enviar heartbeat sem token válido e parar em 401.
 React.useEffect(() => {
-  return startSessionHeartbeat({
-    intervalMs: 20000,
-  });
+  let alive = true;
+  const tick = async () => {
+    try { await apiFetch("/api/auth/heartbeat", { method: "POST" }); } catch (_e) {}
+  };
+  tick();
+  const id = setInterval(() => { if (alive) tick(); }, 20000);
+  return () => { alive = false; clearInterval(id); };
 }, []);
   const tenant = getTenant() || "public";
   const token = getToken();
