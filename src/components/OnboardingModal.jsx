@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { getTenant, getToken } from "../lib/auth.js";
 
-
 const USER_TYPES = [
   { value: "founder", label: "Founder" },
   { value: "investor", label: "Investor" },
@@ -38,6 +37,19 @@ const LANGUAGES = [
   { value: "pt-PT", label: "Português (Portugal)" },
 ];
 
+const DEFAULT_LANGUAGE_BY_COUNTRY = {
+  BR: "pt-BR",
+  PT: "pt-PT",
+  ES: "es-ES",
+  AR: "es-ES",
+  MX: "es-ES",
+  CO: "es-ES",
+  CL: "es-ES",
+  UY: "es-ES",
+  US: "en-US",
+  OTHER: "en-US",
+};
+
 function normalizeUserType(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
@@ -71,19 +83,28 @@ function normalizeIntent(value) {
   return aliases[raw] || "";
 }
 
+function normalizeWhatsapp(value) {
+  return String(value || "").replace(/[^\d+]/g, "").trim();
+}
+
+function suggestLanguage(country) {
+  const code = String(country || "").trim().toUpperCase();
+  return DEFAULT_LANGUAGE_BY_COUNTRY[code] || "en-US";
+}
+
 function sanitizeOnboardingPayload(payload) {
+  const country = String(payload?.country || "").trim().toUpperCase() || "BR";
   return {
     company: String(payload?.company || "").trim(),
     role: String(payload?.role || payload?.profile_role || "").trim(),
-    user_type: normalizeUserType(payload?.user_type),
-    intent: normalizeIntent(payload?.intent),
-    country: String(payload?.country || "").trim(),
-    language: String(payload?.language || "").trim(),
-    whatsapp: String(payload?.whatsapp || "").trim(),
+    user_type: normalizeUserType(payload?.user_type) || "other",
+    intent: normalizeIntent(payload?.intent) || "explore",
+    country,
+    language: String(payload?.language || "").trim() || suggestLanguage(country),
+    whatsapp: normalizeWhatsapp(payload?.whatsapp || ""),
     notes: String(payload?.notes || "").trim(),
   };
 }
-
 
 const ORKIO_ENV =
   typeof window !== "undefined" && window.__ORKIO_ENV__ ? window.__ORKIO_ENV__ : {};
@@ -102,11 +123,8 @@ function resolveApiBase() {
     ""
   );
 
-  // v3.3.1d — NETWORK HARDENING
-  // Prefer explicit API base when present to avoid web/proxy ambiguity.
   if (envBase) return envBase;
 
-  // Fallback to same-origin only if env is absent.
   if (typeof window !== "undefined" && window.location?.origin) {
     return normalizeBase(window.location.origin);
   }
@@ -143,8 +161,6 @@ async function readErrorMessage(res) {
 }
 
 async function saveOnboarding(payload, token, org) {
-  // Single contract only:
-  // POST /api/user/onboarding
   const url = buildUrl("/api/user/onboarding");
   const res = await fetch(url, {
     method: "POST",
@@ -155,12 +171,6 @@ async function saveOnboarding(payload, token, org) {
 
   if (!res.ok) {
     const msg = await readErrorMessage(res);
-    const currentOrigin = typeof window !== "undefined" ? window.location?.origin || "" : "";
-    if (res.status === 405 && url.startsWith(currentOrigin)) {
-      throw new Error(
-        "Onboarding endpoint is not available on the web service. Configure VITE_API_BASE_URL / VITE_API_URL to point to the real API service."
-      );
-    }
     throw new Error(msg || `Onboarding failed (${res.status})`);
   }
 
@@ -171,30 +181,34 @@ async function saveOnboarding(payload, token, org) {
   }
 }
 
+const labelStyle = {
+  display: "block",
+  marginBottom: 8,
+  color: "#0f172a",
+  fontWeight: 800,
+  fontSize: 14,
+};
+
 const fieldStyle = {
   width: "100%",
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.05)",
-  color: "#fff",
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
   padding: "14px 16px",
-  fontSize: 16,
+  fontSize: 15,
   outline: "none",
   boxSizing: "border-box",
   appearance: "none",
   WebkitAppearance: "none",
   MozAppearance: "none",
+  WebkitTextFillColor: "#0f172a",
+  boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)",
 };
 
 const optionStyle = {
-  backgroundColor: "#0f172a",
-  color: "#ffffff",
-};
-
-const labelStyle = {
-  display: "block",
-  marginBottom: 8,
-  color: "rgba(255,255,255,0.72)",
+  backgroundColor: "#ffffff",
+  color: "#0f172a",
 };
 
 export default function OnboardingModal({ user, onComplete }) {
@@ -211,19 +225,14 @@ export default function OnboardingModal({ user, onComplete }) {
   async function handleSubmit(e) {
     e?.preventDefault?.();
 
-    if (!form.user_type || !form.intent || !form.country || !form.language) {
-      setError("Please choose your user type, main interest, country and language.");
-      return;
-    }
-
     const payload = {
       company: form.company || null,
       role: form.role || null,
-      user_type: form.user_type,
-      intent: form.intent,
-      country: form.country || null,
-      language: form.language || null,
-      whatsapp: form.whatsapp || null,
+      user_type: form.user_type || "other",
+      intent: form.intent || "explore",
+      country: form.country || "BR",
+      language: form.language || suggestLanguage(form.country || "BR"),
+      whatsapp: normalizeWhatsapp(form.whatsapp || ""),
       notes: form.notes || null,
       onboarding_completed: true,
     };
@@ -265,7 +274,7 @@ export default function OnboardingModal({ user, onComplete }) {
         position: "fixed",
         inset: 0,
         zIndex: 1000,
-        background: "rgba(5,8,18,0.92)",
+        background: "rgba(5,8,18,0.72)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -276,15 +285,14 @@ export default function OnboardingModal({ user, onComplete }) {
         onSubmit={handleSubmit}
         style={{
           width: "100%",
-          maxWidth: 680,
-          maxHeight: "90vh",
+          maxWidth: 760,
+          maxHeight: "92vh",
           overflowY: "auto",
           borderRadius: 24,
-          border: "1px solid rgba(255,255,255,0.10)",
-          background:
-            "linear-gradient(180deg, rgba(18,24,41,0.98), rgba(9,14,26,0.98))",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.35)",
-          color: "#fff",
+          border: "1px solid rgba(15,23,42,0.08)",
+          background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.28)",
+          color: "#0f172a",
           padding: 20,
           boxSizing: "border-box",
         }}
@@ -295,38 +303,54 @@ export default function OnboardingModal({ user, onComplete }) {
               fontSize: 12,
               letterSpacing: "0.14em",
               textTransform: "uppercase",
-              color: "rgba(255,255,255,0.55)",
+              color: "#475569",
+              fontWeight: 800,
             }}
           >
             Summit private mode
           </div>
-          <h2 style={{ margin: "8px 0 6px", fontSize: 28, lineHeight: 1.1 }}>
-            Welcome to Orkio
+          <h2 style={{ margin: "8px 0 6px", fontSize: 30, lineHeight: 1.1 }}>
+            Complete seu onboarding
           </h2>
-          <p style={{ margin: 0, color: "rgba(255,255,255,0.72)", lineHeight: 1.5 }}>
-            A quick 30-second setup so Orkio can focus the experience around you.
+          <p style={{ margin: 0, color: "#475569", lineHeight: 1.55 }}>
+            País, idioma e WhatsApp agora fazem parte do cadastro inicial para personalizar a experiência e o acompanhamento.
           </p>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 18,
+            borderRadius: 18,
+            border: "1px solid #dbeafe",
+            background: "linear-gradient(135deg, rgba(37,99,235,0.08), rgba(124,92,255,0.08))",
+            padding: "14px 16px",
+            color: "#334155",
+            fontSize: 14,
+            lineHeight: 1.5,
+          }}
+        >
+          Preencha os campos abaixo. O formulário foi ajustado para alto contraste e melhor leitura em desktop e mobile.
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
           <div>
-            <label style={labelStyle}>Full name</label>
+            <label style={labelStyle}>Nome completo</label>
             <input value={fullName} readOnly style={{ ...fieldStyle, opacity: 0.85 }} />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
             <div>
-              <label style={labelStyle}>Company</label>
+              <label style={labelStyle}>Empresa</label>
               <input
                 value={form.company}
                 onChange={(e) => setField("company", e.target.value)}
-                placeholder="Your company"
+                placeholder="Sua empresa"
                 style={fieldStyle}
               />
             </div>
 
             <div>
-              <label style={labelStyle}>Role / Title</label>
+              <label style={labelStyle}>Papel / cargo</label>
               <input
                 value={form.role}
                 onChange={(e) => setField("role", e.target.value)}
@@ -336,15 +360,14 @@ export default function OnboardingModal({ user, onComplete }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
             <div>
-              <label style={labelStyle}>User type</label>
+              <label style={labelStyle}>Perfil</label>
               <select
                 value={form.user_type}
-                onChange={(e) => setField("user_type", e.target.value)}
+                onChange={(e) => setField("user_type", e.target.value || "other")}
                 style={fieldStyle}
               >
-                <option value="" style={optionStyle}>Select...</option>
                 {USER_TYPES.map((opt) => (
                   <option key={opt.value} value={opt.value} style={optionStyle}>
                     {opt.label}
@@ -354,13 +377,12 @@ export default function OnboardingModal({ user, onComplete }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Main interest</label>
+              <label style={labelStyle}>Objetivo principal</label>
               <select
                 value={form.intent}
-                onChange={(e) => setField("intent", e.target.value)}
+                onChange={(e) => setField("intent", e.target.value || "explore")}
                 style={fieldStyle}
               >
-                <option value="" style={optionStyle}>Select...</option>
                 {INTENTS.map((opt) => (
                   <option key={opt.value} value={opt.value} style={optionStyle}>
                     {opt.label}
@@ -370,15 +392,24 @@ export default function OnboardingModal({ user, onComplete }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
             <div>
-              <label style={labelStyle}>Country</label>
+              <label style={labelStyle}>País</label>
               <select
                 value={form.country}
-                onChange={(e) => setField("country", e.target.value)}
+                onChange={(e) => {
+                  const nextCountry = e.target.value || "BR";
+                  setForm((prev) => ({
+                    ...prev,
+                    country: nextCountry,
+                    language:
+                      !prev.language || prev.language === suggestLanguage(prev.country || "BR")
+                        ? suggestLanguage(nextCountry)
+                        : prev.language,
+                  }));
+                }}
                 style={fieldStyle}
               >
-                <option value="" style={optionStyle}>Select...</option>
                 {COUNTRIES.map((opt) => (
                   <option key={opt.value} value={opt.value} style={optionStyle}>
                     {opt.label}
@@ -388,13 +419,12 @@ export default function OnboardingModal({ user, onComplete }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Language</label>
+              <label style={labelStyle}>Idioma</label>
               <select
                 value={form.language}
-                onChange={(e) => setField("language", e.target.value)}
+                onChange={(e) => setField("language", e.target.value || suggestLanguage(form.country))}
                 style={fieldStyle}
               >
-                <option value="" style={optionStyle}>Select...</option>
                 {LANGUAGES.map((opt) => (
                   <option key={opt.value} value={opt.value} style={optionStyle}>
                     {opt.label}
@@ -408,70 +438,73 @@ export default function OnboardingModal({ user, onComplete }) {
             <label style={labelStyle}>WhatsApp</label>
             <input
               value={form.whatsapp}
-              onChange={(e) => setField("whatsapp", e.target.value)}
+              onChange={(e) => setField("whatsapp", normalizeWhatsapp(e.target.value))}
               placeholder="+55 51 99999-9999"
               style={fieldStyle}
+              inputMode="tel"
             />
           </div>
 
           <div>
-            <label style={labelStyle}>Anything you'd like Orkio to focus on?</label>
+            <label style={labelStyle}>Contexto adicional</label>
             <textarea
               value={form.notes}
               onChange={(e) => setField("notes", e.target.value)}
-              placeholder="Optional note"
-              rows={5}
-              style={{ ...fieldStyle, resize: "vertical" }}
+              placeholder="Conte em uma frase o que você quer resolver ou explorar."
+              style={{ ...fieldStyle, minHeight: 120, resize: "vertical" }}
             />
           </div>
+        </div>
 
-          {error ? (
-            <div
-              style={{
-                borderRadius: 14,
-                border: "1px solid rgba(255,120,120,0.25)",
-                background: "rgba(120,20,20,0.18)",
-                color: "#ffd6d6",
-                padding: "12px 14px",
-                fontSize: 14,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
+        {error ? (
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginTop: 8,
+              marginTop: 16,
+              color: "#0f172a",
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              borderRadius: 14,
+              padding: "12px 14px",
+              fontSize: 14,
             }}
           >
-            <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 13 }}>
-              This appears only once after your approved login.
-            </div>
-
-            <button
-              type="submit"
-              disabled={busy}
-              style={{
-                border: "none",
-                borderRadius: 18,
-                background: "#ffffff",
-                color: "#111827",
-                padding: "14px 22px",
-                fontSize: 18,
-                fontWeight: 700,
-                cursor: busy ? "wait" : "pointer",
-                opacity: busy ? 0.7 : 1,
-                minWidth: 220,
-              }}
-            >
-              {busy ? "Saving..." : "Continue to Orkio"}
-            </button>
+            {error}
           </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "center",
+            marginTop: 18,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ color: "#64748b", fontSize: 13 }}>
+            Este passo aparece apenas uma vez após seu acesso aprovado.
+          </div>
+
+          <button
+            type="submit"
+            disabled={busy}
+            style={{
+              border: 0,
+              borderRadius: 16,
+              padding: "14px 18px",
+              minWidth: 220,
+              cursor: "pointer",
+              background: "linear-gradient(135deg, #2563eb, #7c3aed)",
+              color: "#ffffff",
+              fontWeight: 800,
+              fontSize: 15,
+              boxShadow: "0 14px 30px rgba(37,99,235,0.24)",
+              opacity: busy ? 0.75 : 1,
+            }}
+          >
+            {busy ? "Salvando..." : "Continuar"}
+          </button>
         </div>
       </form>
     </div>
