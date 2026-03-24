@@ -3,13 +3,11 @@
 const TOKEN_KEY = "orkio_token";
 const USER_KEY = "orkio_user";
 const TENANT_KEY = "orkio_tenant";
+const PENDING_OTP_CONTEXT_KEY = "orkio_pending_otp_context";
 
 /**
- * ============================
  * TOKEN
- * ============================
  */
-
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -24,11 +22,8 @@ export function clearToken() {
 }
 
 /**
- * ============================
  * TENANT
- * ============================
  */
-
 export function getTenant() {
   return localStorage.getItem(TENANT_KEY);
 }
@@ -43,11 +38,8 @@ export function clearTenant() {
 }
 
 /**
- * ============================
- * USER STORAGE
- * ============================
+ * USER
  */
-
 export function getUser() {
   try {
     const raw = localStorage.getItem(USER_KEY);
@@ -60,7 +52,7 @@ export function getUser() {
 
 export function setUser(user) {
   if (!user) return;
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user)));
 }
 
 export function clearUser() {
@@ -68,79 +60,100 @@ export function clearUser() {
 }
 
 /**
- * ============================
- * SESSION
- * ============================
+ * OTP PENDING CONTEXT
  */
+export function savePendingOtpContext(context) {
+  if (!context) return;
+  localStorage.setItem(PENDING_OTP_CONTEXT_KEY, JSON.stringify(context));
+}
 
+export function getPendingOtpContext() {
+  try {
+    const raw = localStorage.getItem(PENDING_OTP_CONTEXT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingOtpContext() {
+  localStorage.removeItem(PENDING_OTP_CONTEXT_KEY);
+}
+
+/**
+ * SESSION
+ */
 export function clearSession() {
   clearToken();
   clearUser();
   clearTenant();
+  clearPendingOtpContext();
 }
 
 export function storeSession({ token, user, tenant }) {
   if (token) setToken(token);
 
-  if (tenant) {
-    setTenant(tenant);
-  } else if (user?.org_slug) {
-    setTenant(user.org_slug);
+  const resolvedTenant =
+    tenant ||
+    user?.org_slug ||
+    user?.tenant ||
+    getTenant() ||
+    "public";
+
+  if (resolvedTenant) {
+    setTenant(resolvedTenant);
   }
 
   if (user) {
-    setUser(normalizeUser(user));
+    setUser(user);
   }
 }
 
 /**
- * ============================
  * USER NORMALIZATION
- * ============================
  */
-
 function normalizeUser(user) {
   if (!user) return null;
 
   const role =
     user.role ||
-    (user.is_admin ? "admin" : null) ||
-    (user.admin ? "admin" : null) ||
+    (user.is_admin === true ? "admin" : null) ||
+    (user.admin === true ? "admin" : null) ||
     "user";
+
+  const hasAdminAccess =
+    role === "admin" ||
+    role === "owner" ||
+    role === "superadmin" ||
+    user.is_admin === true ||
+    user.admin === true;
 
   return {
     ...user,
     role,
-    is_admin:
-      user.is_admin === true ||
-      user.admin === true ||
-      role === "admin" ||
-      role === "owner" ||
-      role === "superadmin",
-    admin:
-      user.admin === true ||
-      user.is_admin === true ||
-      role === "admin" ||
-      role === "owner" ||
-      role === "superadmin",
+    is_admin: hasAdminAccess,
+    admin: hasAdminAccess,
   };
 }
 
 /**
- * ============================
- * LOGIN FLOW (OTP)
- * ============================
+ * OTP LOGIN COMPLETE
  */
-
 export function completeOtpLogin(data) {
   if (!data?.access_token || !data?.user) {
     throw new Error("Invalid OTP login response");
   }
 
+  const pending = getPendingOtpContext();
+
   const tenant =
     data.user?.org_slug ||
+    data.user?.tenant ||
     data.tenant ||
-    localStorage.getItem(TENANT_KEY) ||
+    pending?.tenant ||
+    pending?.org_slug ||
+    getTenant() ||
     "public";
 
   storeSession({
@@ -148,59 +161,50 @@ export function completeOtpLogin(data) {
     user: data.user,
     tenant,
   });
+
+  clearPendingOtpContext();
 }
 
 /**
- * ============================
  * AUTH STATE
- * ============================
  */
-
 export function isAuthenticated() {
   return Boolean(getToken());
 }
 
 /**
- * ============================
  * APPROVAL
- * ============================
  */
-
 export function isApproved(user) {
   if (!user) return false;
 
-  return (
+  return Boolean(
     user.approved_at ||
-    user.usage_tier?.startsWith("summit") ||
-    user.signup_source === "investor" ||
-    user.signup_code_label === "efata777"
+      (typeof user.usage_tier === "string" &&
+        user.usage_tier.startsWith("summit")) ||
+      user.signup_source === "investor" ||
+      user.signup_code_label === "efata777"
   );
 }
 
 /**
- * ============================
  * ADMIN ACCESS
- * ============================
  */
-
 export function isAdmin(user) {
   if (!user) return false;
 
-  return (
+  return Boolean(
     user.role === "admin" ||
-    user.role === "owner" ||
-    user.role === "superadmin" ||
-    user.is_admin === true ||
-    user.admin === true
+      user.role === "owner" ||
+      user.role === "superadmin" ||
+      user.is_admin === true ||
+      user.admin === true
   );
 }
 
 /**
- * ============================
- * MERGE /api/me RESPONSE
- * ============================
+ * MERGE USER FROM /api/me
  */
-
 export function mergeUserFromApiMe(apiUser) {
   if (!apiUser) return;
 
@@ -212,14 +216,18 @@ export function mergeUserFromApiMe(apiUser) {
   });
 
   setUser(merged);
+
+  const tenant =
+    merged?.org_slug || merged?.tenant || getTenant() || "public";
+
+  if (tenant) {
+    setTenant(tenant);
+  }
 }
 
 /**
- * ============================
  * LOGOUT
- * ============================
  */
-
 export function logout() {
   clearSession();
   window.location.href = "/auth";
