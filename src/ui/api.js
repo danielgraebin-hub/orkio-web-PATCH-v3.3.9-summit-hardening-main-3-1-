@@ -223,6 +223,39 @@ export const submitOnboarding = (payload, opts = {}) =>
   });
 
 /* =========================
+ * PUBLIC CHAT
+ * ========================= */
+
+export async function publicChat(
+  { lead_id, message, thread_id = null } = {},
+  opts = {}
+) {
+  const res = await apiFetch("/api/public/chat", {
+    method: "POST",
+    skipAuthRedirect: true,
+    ...opts,
+    body: {
+      lead_id,
+      message,
+      thread_id,
+    },
+  });
+
+  const payload = res?.data ?? res;
+  return {
+    ok: true,
+    thread_id: payload?.thread_id || thread_id || null,
+    reply:
+      payload?.reply ||
+      payload?.message ||
+      payload?.content ||
+      payload?.answer ||
+      "",
+    raw: payload,
+  };
+}
+
+/* =========================
  * FILES
  * ========================= */
 
