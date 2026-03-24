@@ -117,11 +117,6 @@ export default function AuthPage() {
     if (!data?.access_token || !data?.user) {
       throw new Error("Sessão inválida");
     }
-    setSession({
-      token: data.access_token,
-      user: data.user,
-      tenant: nextTenant,
-    });
     completeOtpLogin({ ...data, tenant: nextTenant });
     nav(data.redirect_to || "/app", { replace: true });
   }
@@ -137,14 +132,15 @@ export default function AuthPage() {
       setStatus("Você precisa aceitar os termos para continuar.");
       return;
     }
+
     const nameNormalized = String(name || "").trim();
+    const emailNormalized = normalizeEmail(email);
+    const normalizedAccessCode = normalizeAccessCode(accessCode);
+
     if (!nameNormalized) {
       setStatus("Informe seu nome.");
       return;
     }
-
-    const emailNormalized = normalizeEmail(email);
-    const normalizedAccessCode = normalizeAccessCode(accessCode);
 
     if (!emailNormalized || !password || !normalizedAccessCode) {
       setStatus("Preencha nome, e-mail, senha e código de acesso.");
@@ -155,7 +151,7 @@ export default function AuthPage() {
     setStatus("Criando sua conta...");
 
     try {
-      const { data } = await apiFetch("/api/auth/register", {
+      await apiFetch("/api/auth/register", {
         method: "POST",
         org: tenant,
         body: {
@@ -169,19 +165,14 @@ export default function AuthPage() {
         },
       });
 
-      if (data?.access_token && data?.user) {
-        await finalizeSession(data, tenant);
-        return;
-      }
-
-      setStatus("Conta criada. Vamos validar seu acesso...");
+      setStatus("Conta criada. Enviando código OTP...");
       savePendingOtpContext({
-        email: data?.email || emailNormalized,
+        email: emailNormalized,
         tenant,
         name: nameNormalized,
         accessCode: normalizedAccessCode,
       });
-      setPendingEmail(data?.email || emailNormalized);
+      setPendingEmail(emailNormalized);
       setOtpMode(true);
 
       const { data: loginData } = await apiFetch("/api/auth/login", {
@@ -198,8 +189,10 @@ export default function AuthPage() {
           accessCode: normalizedAccessCode,
         });
         setPendingEmail(loginData.email || emailNormalized);
-        setOtpMode(true);
-        setStatus(loginData.message || "Enviamos um código para o seu e-mail.");
+        setStatus(
+          loginData.message ||
+          "Código OTP enviado. Valide para entrar direto no console."
+        );
         return;
       }
 
@@ -208,9 +201,9 @@ export default function AuthPage() {
         return;
       }
 
-      setStatus("Conta criada, mas o fluxo não consolidou a sessão.");
+      setStatus(loginData?.message || "Conta criada, mas o OTP não foi emitido corretamente.");
     } catch (err) {
-      setStatus(err?.message || "Falha no registro.");
+      setStatus(err?.message || "Falha no cadastro.");
     } finally {
       setBusy(false);
     }
