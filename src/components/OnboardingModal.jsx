@@ -18,6 +18,26 @@ const INTENTS = [
   { value: "other", label: "Outro" },
 ];
 
+const COUNTRIES = [
+  { value: "BR", label: "Brasil" },
+  { value: "US", label: "Estados Unidos" },
+  { value: "ES", label: "Espanha" },
+  { value: "PT", label: "Portugal" },
+  { value: "AR", label: "Argentina" },
+  { value: "MX", label: "México" },
+  { value: "CO", label: "Colômbia" },
+  { value: "CL", label: "Chile" },
+  { value: "UY", label: "Uruguai" },
+  { value: "OTHER", label: "Outro" },
+];
+
+const LANGUAGES = [
+  { value: "pt-BR", label: "Português (Brasil)" },
+  { value: "en-US", label: "English (US)" },
+  { value: "es-ES", label: "Español" },
+  { value: "pt-PT", label: "Português (Portugal)" },
+];
+
 function normalizeUserType(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
@@ -57,6 +77,9 @@ function sanitizeOnboardingPayload(payload) {
     role: String(payload?.role || payload?.profile_role || "").trim(),
     user_type: normalizeUserType(payload?.user_type),
     intent: normalizeIntent(payload?.intent),
+    country: String(payload?.country || "").trim(),
+    language: String(payload?.language || "").trim(),
+    whatsapp: String(payload?.whatsapp || "").trim(),
     notes: String(payload?.notes || "").trim(),
   };
 }
@@ -188,8 +211,8 @@ export default function OnboardingModal({ user, onComplete }) {
   async function handleSubmit(e) {
     e?.preventDefault?.();
 
-    if (!form.user_type || !form.intent) {
-      setError("Please choose your user type and main interest.");
+    if (!form.user_type || !form.intent || !form.country || !form.language) {
+      setError("Please choose your user type, main interest, country and language.");
       return;
     }
 
@@ -198,6 +221,9 @@ export default function OnboardingModal({ user, onComplete }) {
       role: form.role || null,
       user_type: form.user_type,
       intent: form.intent,
+      country: form.country || null,
+      language: form.language || null,
+      whatsapp: form.whatsapp || null,
       notes: form.notes || null,
       onboarding_completed: true,
     };
@@ -218,6 +244,9 @@ export default function OnboardingModal({ user, onComplete }) {
             profile_role: payload.role,
             user_type: payload.user_type,
             intent: payload.intent,
+            country: payload.country,
+            language: payload.language,
+            whatsapp: payload.whatsapp,
             notes: payload.notes,
             onboarding_completed: true,
           };
@@ -339,6 +368,50 @@ export default function OnboardingModal({ user, onComplete }) {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div>
+              <label style={labelStyle}>Country</label>
+              <select
+                value={form.country}
+                onChange={(e) => setField("country", e.target.value)}
+                style={fieldStyle}
+              >
+                <option value="" style={optionStyle}>Select...</option>
+                {COUNTRIES.map((opt) => (
+                  <option key={opt.value} value={opt.value} style={optionStyle}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Language</label>
+              <select
+                value={form.language}
+                onChange={(e) => setField("language", e.target.value)}
+                style={fieldStyle}
+              >
+                <option value="" style={optionStyle}>Select...</option>
+                {LANGUAGES.map((opt) => (
+                  <option key={opt.value} value={opt.value} style={optionStyle}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>WhatsApp</label>
+            <input
+              value={form.whatsapp}
+              onChange={(e) => setField("whatsapp", e.target.value)}
+              placeholder="+55 51 99999-9999"
+              style={fieldStyle}
+            />
           </div>
 
           <div>
