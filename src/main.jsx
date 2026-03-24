@@ -18,29 +18,21 @@ import Cookies from "./routes/legal/Cookies.jsx";
 import AiUsage from "./routes/legal/AiUsage.jsx";
 import AiGovernance from "./routes/legal/AiGovernance.jsx";
 
+
 function RequireApproved({ children }) {
   const token = getToken();
   const user = getUser();
-
-  const summitApproved =
-    !!user &&
-    (
-      user.role === "admin" ||
-      !!user.approved_at ||
-      String(user.usage_tier || "").startsWith("summit_") ||
-      String(user.signup_source || "").toLowerCase() === "investor" ||
-      String(user.signup_code_label || "").toLowerCase() === "efata777"
-    );
-
   if (!token) return <Navigate to="/auth" replace />;
-  if (!summitApproved) return <Navigate to="/auth?pending_approval=1" replace />;
+  if (!isApproved(user)) return <Navigate to="/auth" replace />;
   return children;
 }
 
 function RequireGuest({ children }) {
   const token = getToken();
   const user = getUser();
-  if (token && isApproved(user)) return <Navigate to="/app" replace />;
+  if (token && isApproved(user)) {
+    return <Navigate to={user?.role === "admin" ? "/admin" : "/app"} replace />;
+  }
   return children;
 }
 
@@ -54,8 +46,7 @@ function RequireAdmin({ children }) {
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
+    <BrowserRouter>      <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<RequireGuest><AuthPage /></RequireGuest>} />
@@ -68,7 +59,8 @@ createRoot(document.getElementById("root")).render(
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/privacy" element={<Privacy />} />
           <Route path="/legal/cookies" element={<Cookies />} />
-          <Route path="/legal/ai-usage" element={<AiUsage />} />
+          <Route path="/legal/ai" element={<AiUsage />} />
+          <Route path="/legal/ai-policy" element={<AiUsage />} />
           <Route path="/legal/ai-governance" element={<AiGovernance />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
