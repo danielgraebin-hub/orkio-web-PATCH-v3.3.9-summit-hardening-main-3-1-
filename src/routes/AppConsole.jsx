@@ -1448,13 +1448,28 @@ function scheduleRealtimeIdleFollowup() {
     rtcConnectingRef.current = true;
 
     try {
+      try { console.log("REALTIME_START_BEGIN", { threadId, destSingle, sessionId: rtcSessionIdRef.current || null }); } catch {}
       logRealtimeStep('start:begin', { threadId, destSingle, summitRuntimeMode: summitRuntimeModeRef.current, summitLanguageProfile: summitLanguageProfileRef.current });
       setV2vError(null);
       setV2vPhase('connecting');
       setUploadStatus('⚡ Conectando Realtime (WebRTC)...');
 
-      if (rtcSessionIdRef.current || rtcPcRef.current || rtcDcRef.current) {
+      if (rtcSessionIdRef.current) {
         await stopRealtime('restart_existing_session');
+      } else if (rtcPcRef.current || rtcDcRef.current || rtcAudioElRef.current) {
+        try { rtcDcRef.current?.close?.(); } catch {}
+        rtcDcRef.current = null;
+        try { rtcPcRef.current?.close?.(); } catch {}
+        rtcPcRef.current = null;
+        try {
+          const staleAudio = rtcAudioElRef.current;
+          if (staleAudio) {
+            try { staleAudio.pause?.(); } catch {}
+            try { staleAudio.srcObject = null; } catch {}
+            try { staleAudio.remove?.(); } catch {}
+          }
+        } catch {}
+        rtcAudioElRef.current = null;
       }
 
       try { setRtcAuditEvents([]); } catch {}
@@ -1499,6 +1514,7 @@ function scheduleRealtimeIdleFollowup() {
       logRealtimeStep('start:ephemeral_ok', { session_id: start?.session_id || null, thread_id: start?.thread_id || null });
 
       rtcSessionIdRef.current = start?.session_id || null;
+      try { console.log("REALTIME_SESSION_STARTED", { sessionId: start?.session_id || null, threadId: start?.thread_id || threadId || null }); } catch {}
       setLastRealtimeSessionId(start?.session_id || null);
       rtcThreadIdRef.current = start?.thread_id || threadId || null;
       if (start?.thread_id && start.thread_id !== threadId) {
