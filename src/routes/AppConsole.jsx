@@ -298,6 +298,14 @@ React.useEffect(() => {
   const [tenant, setTenant] = useState(getTenant() || "public");
   const [token, setToken] = useState(getToken());
   const [user, setUser] = useState(getUser());
+  const canAccessAdmin = Boolean(
+    isAdmin(user)
+    || user?.role === "admin"
+    || user?.role === "owner"
+    || user?.role === "superadmin"
+    || user?.is_admin === true
+    || user?.admin === true
+  );
 
 const [onboardingChecked, setOnboardingChecked] = useState(false);
 const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -480,13 +488,27 @@ useEffect(() => {
           ...(u || {}),
           ...data,
           org_slug: data?.org_slug || u?.org_slug || org,
+          role: data?.role || u?.role || "user",
           signup_source: data?.signup_source ?? u?.signup_source ?? null,
           signup_code_label: data?.signup_code_label ?? u?.signup_code_label ?? null,
           product_scope: data?.product_scope ?? u?.product_scope ?? null,
           country: data?.country ?? u?.country ?? null,
           language: data?.language ?? u?.language ?? null,
           whatsapp: data?.whatsapp ?? u?.whatsapp ?? null,
+          is_admin: (
+            data?.is_admin === true
+            || data?.admin === true
+            || u?.is_admin === true
+            || u?.admin === true
+            || data?.role === "admin"
+            || data?.role === "owner"
+            || data?.role === "superadmin"
+            || u?.role === "admin"
+            || u?.role === "owner"
+            || u?.role === "superadmin"
+          ),
         };
+        mergedUser.admin = mergedUser.is_admin === true;
 
         setUser(mergedUser);
         try { setSession({ token: t, user: mergedUser, tenant: mergedUser.org_slug || org }); } catch {}
@@ -2603,7 +2625,7 @@ async function stopRealtime(reason = 'client_stop') {
           </div>
 
           <div style={styles.userActions}>
-            {isAdmin(user) && (
+            {canAccessAdmin && (
               <button style={styles.iconBtn} onClick={() => nav("/admin")} title="Admin Console">
                 <IconSettings />
               </button>
@@ -3072,7 +3094,7 @@ async function stopRealtime(reason = 'client_stop') {
               <span>Institucional (global do tenant → todos os agentes)</span>
             </div>
             <div style={styles.hint}>
-              {isAdmin(user)
+              {canAccessAdmin
                 ? "Como admin, o documento vira institucional imediatamente."
                 : "Como usuário, isso vira uma SOLICITAÇÃO para o admin aprovar/reprovar. Enquanto isso, ele fica disponível nesta conversa."}
             </div>
