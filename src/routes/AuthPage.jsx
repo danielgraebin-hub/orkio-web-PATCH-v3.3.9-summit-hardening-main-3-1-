@@ -54,20 +54,25 @@ const btn = {
   background: "linear-gradient(135deg, #2563eb, #0f172a)",
   color: "#fff",
 };
-const muted = { color: "#64748b", fontSize: 14, lineHeight: 1.5 };
-const codeHint = {
-  marginTop: 8,
-  fontSize: 12,
-  color: "#475569",
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  borderRadius: 12,
-  padding: "10px 12px",
+const secondaryBtn = {
+  width: "100%",
+  border: "1px solid #cbd5e1",
+  borderRadius: 18,
+  padding: "15px 18px",
+  fontWeight: 700,
+  fontSize: 15,
+  cursor: "pointer",
+  background: "#ffffff",
+  color: "#0f172a",
 };
+const muted = { color: "#64748b", fontSize: 14, lineHeight: 1.5 };
 
 export default function AuthPage() {
   const nav = useNavigate();
   const [tenant] = useState("public");
+
+  const [mode, setMode] = useState("register"); // register | login
+  const [otpMode, setOtpMode] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -76,7 +81,6 @@ export default function AuthPage() {
   const [accessCode, setAccessCode] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
 
-  const [otpMode, setOtpMode] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
 
@@ -92,17 +96,34 @@ export default function AuthPage() {
   }, [nav]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedMode = (params.get("mode") || "").toLowerCase();
+    if (requestedMode === "login" || requestedMode === "signin") {
+      setMode("login");
+    }
+
     const ctx = getPendingOtpContext();
     if (ctx?.email) {
       setOtpMode(true);
       setPendingEmail(ctx.email);
+      setEmail(ctx.email);
     }
   }, []);
 
-  const title = useMemo(
-    () => (otpMode ? "Valide seu código de acesso" : "Crie sua conta Summit"),
-    [otpMode]
-  );
+  const title = useMemo(() => {
+    if (otpMode) return "Verify your access code";
+    return mode === "login" ? "Sign in to your account" : "Create your account";
+  }, [otpMode, mode]);
+
+  const subtitle = useMemo(() => {
+    if (otpMode) {
+      return "Use the one-time code sent to your email to enter the console.";
+    }
+    if (mode === "login") {
+      return "Sign in with your email and password. If required, we will send a one-time code to complete access.";
+    }
+    return "Register, verify your email with OTP, and continue straight into the console.";
+  }, [otpMode, mode]);
 
   function normalizeEmail(v) {
     return String(v || "").trim().toLowerCase();
@@ -112,24 +133,37 @@ export default function AuthPage() {
     return String(v || "").trim().toUpperCase();
   }
 
+  function setAuthMode(nextMode) {
+    setMode(nextMode);
+    setOtpMode(false);
+    setOtpCode("");
+    setStatus("");
+    const url = new URL(window.location.href);
+    url.searchParams.set("mode", nextMode);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }
+
   async function finalizeSession(data, resolvedTenant) {
-    const nextTenant = setTenant(resolvedTenant || tenant);
+    const nextTenant = resolvedTenant || tenant || "public";
+    setTenant(nextTenant);
+
     if (!data?.access_token || !data?.user) {
-      throw new Error("Sessão inválida");
+      throw new Error("Invalid session payload.");
     }
+
     completeOtpLogin({ ...data, tenant: nextTenant });
-    nav(data.redirect_to || "/app", { replace: true });
+    nav("/app", { replace: true });
   }
 
   async function doRegister() {
     if (busy) return;
 
     if (password !== passwordConfirm) {
-      setStatus("As senhas não coincidem.");
+      setStatus("Passwords do not match.");
       return;
     }
     if (!acceptTerms) {
-      setStatus("Você precisa aceitar os termos para continuar.");
+      setStatus("You must accept the terms to continue.");
       return;
     }
 
@@ -138,17 +172,17 @@ export default function AuthPage() {
     const normalizedAccessCode = normalizeAccessCode(accessCode);
 
     if (!nameNormalized) {
-      setStatus("Informe seu nome.");
+      setStatus("Please enter your full name.");
       return;
     }
 
     if (!emailNormalized || !password || !normalizedAccessCode) {
-      setStatus("Preencha nome, e-mail, senha e código de acesso.");
+      setStatus("Please complete name, email, password, and access code.");
       return;
     }
 
     setBusy(true);
-    setStatus("Criando sua conta...");
+    setStatus("Creating your account...");
 
     try {
       await apiFetch("/api/auth/register", {
@@ -165,7 +199,7 @@ export default function AuthPage() {
         },
       });
 
-      setStatus("Conta criada. Enviando código OTP...");
+      setStatus("Account created. Sending OTP...");
       savePendingOtpContext({
         email: emailNormalized,
         tenant,
@@ -191,7 +225,7 @@ export default function AuthPage() {
         setPendingEmail(loginData.email || emailNormalized);
         setStatus(
           loginData.message ||
-          "Código OTP enviado. Valide para entrar direto no console."
+          "OTP sent. Verify it to enter the console."
         );
         return;
       }
@@ -201,9 +235,57 @@ export default function AuthPage() {
         return;
       }
 
-      setStatus(loginData?.message || "Conta criada, mas o OTP não foi emitido corretamente.");
+      setStatus(loginData?.message || "Account created, but OTP was not issued correctly.");
     } catch (err) {
-      setStatus(err?.message || "Falha no cadastro.");
+      setStatus(err?.message || "Registration failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doLogin() {
+    if (busy) return;
+
+    const emailNormalized = normalizeEmail(email);
+
+    if (!emailNormalized || !password) {
+      setStatus("Please enter your email and password.");
+      return;
+    }
+
+    setBusy(true);
+    setStatus("Signing you in...");
+
+    try {
+      const { data } = await apiFetch("/api/auth/login", {
+        method: "POST",
+        org: tenant,
+        body: {
+          tenant,
+          email: emailNormalized,
+          password,
+        },
+      });
+
+      if (data?.pending_otp) {
+        savePendingOtpContext({
+          email: data.email || emailNormalized,
+          tenant,
+        });
+        setPendingEmail(data.email || emailNormalized);
+        setOtpMode(true);
+        setStatus(data?.message || "OTP sent. Check your email.");
+        return;
+      }
+
+      if (data?.access_token && data?.user) {
+        await finalizeSession(data, tenant);
+        return;
+      }
+
+      setStatus(data?.message || "Unable to complete sign in.");
+    } catch (err) {
+      setStatus(err?.message || "Sign in failed.");
     } finally {
       setBusy(false);
     }
@@ -218,12 +300,12 @@ export default function AuthPage() {
     const code = String(otpCode || "").trim();
 
     if (!emailNormalized || !code) {
-      setStatus("Informe o código OTP recebido por e-mail.");
+      setStatus("Please enter the OTP sent by email.");
       return;
     }
 
     setBusy(true);
-    setStatus("Validando código...");
+    setStatus("Verifying code...");
 
     try {
       const { data } = await apiFetch("/api/auth/login/verify-otp", {
@@ -237,13 +319,13 @@ export default function AuthPage() {
       });
 
       if (!data?.access_token || !data?.user) {
-        setStatus(data?.message || "Código inválido ou sessão não consolidada.");
+        setStatus(data?.message || "Invalid code or session not finalized.");
         return;
       }
 
       await finalizeSession(data, resolvedTenant);
     } catch (err) {
-      setStatus(err?.message || "Falha na validação do código.");
+      setStatus(err?.message || "OTP validation failed.");
     } finally {
       setBusy(false);
     }
@@ -253,73 +335,116 @@ export default function AuthPage() {
     <div style={shell}>
       <div style={card}>
         <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", fontWeight: 800 }}>
-          Orkio Summit
+          Orkio
         </div>
         <h1 style={{ margin: "10px 0 8px", fontSize: 32, lineHeight: 1.05 }}>{title}</h1>
-        <p style={{ ...muted, marginTop: 0 }}>
-          {otpMode
-            ? "Use o código enviado ao seu e-mail para entrar direto no console."
-            : "Cadastro → OTP → console. Sem loops, sem novo login, sem aprovação manual para Summit elegível."}
-        </p>
+        <p style={{ ...muted, marginTop: 0 }}>{subtitle}</p>
 
         {!otpMode ? (
-          <div style={{ display: "grid", gap: 14 }}>
-            <div>
-              <label style={label}>Nome completo</label>
-              <input style={input} placeholder="Seu nome" value={name} onChange={(e) => setName(e.target.value)} />
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+              <button
+                type="button"
+                style={mode === "register" ? btn : secondaryBtn}
+                onClick={() => setAuthMode("register")}
+                disabled={busy}
+              >
+                Create account
+              </button>
+              <button
+                type="button"
+                style={mode === "login" ? btn : secondaryBtn}
+                onClick={() => setAuthMode("login")}
+                disabled={busy}
+              >
+                Sign in
+              </button>
             </div>
 
-            <div>
-              <label style={label}>E-mail</label>
-              <input style={input} placeholder="voce@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
+            {mode === "register" ? (
+              <div style={{ display: "grid", gap: 14 }}>
+                <div>
+                  <label style={label}>Full name</label>
+                  <input style={input} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div>
-                <label style={label}>Senha</label>
-                <input style={input} type="password" placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div>
+                  <label style={label}>Email</label>
+                  <input style={input} placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div>
+                    <label style={label}>Password</label>
+                    <input style={input} type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={label}>Confirm password</label>
+                    <input style={input} type="password" placeholder="Repeat your password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={label}>Access code</label>
+                  <input
+                    style={input}
+                    placeholder="Enter your access code"
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: "#334155", fontSize: 14 }}>
+                  <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} />
+                  <span>I agree to the terms and privacy policy.</span>
+                </label>
+
+                <button style={btn} disabled={busy} onClick={doRegister}>
+                  {busy ? "Processing..." : "Create account and receive OTP"}
+                </button>
               </div>
-              <div>
-                <label style={label}>Confirmar senha</label>
-                <input style={input} type="password" placeholder="Repita sua senha" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
+            ) : (
+              <div style={{ display: "grid", gap: 14 }}>
+                <div>
+                  <label style={label}>Email</label>
+                  <input style={input} placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+
+                <div>
+                  <label style={label}>Password</label>
+                  <input style={input} type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                </div>
+
+                <button style={btn} disabled={busy} onClick={doLogin}>
+                  {busy ? "Processing..." : "Sign in"}
+                </button>
               </div>
-            </div>
-
-            <div>
-              <label style={label}>Código de acesso</label>
-              <input
-                style={input}
-                placeholder="SOUTHSUMMIT26 ou EFATA777"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-              />
-              <div style={codeHint}>
-                <strong>South Summit:</strong> use <code>southsummit26</code> para acesso geral.<br />
-                <strong>Investidores:</strong> use <code>efata777</code> para acesso expandido.
-              </div>
-            </div>
-
-            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: "#334155", fontSize: 14 }}>
-              <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} />
-              <span>Aceito os termos e a política de privacidade.</span>
-            </label>
-
-            <button style={btn} disabled={busy} onClick={doRegister}>
-              {busy ? "Processando..." : "Criar conta e receber OTP"}
-            </button>
-          </div>
+            )}
+          </>
         ) : (
           <div style={{ display: "grid", gap: 14 }}>
             <div>
-              <label style={label}>E-mail</label>
+              <label style={label}>Email</label>
               <input style={{ ...input, opacity: 0.85 }} readOnly value={pendingEmail || email} />
             </div>
             <div>
-              <label style={label}>Código OTP</label>
-              <input style={input} placeholder="Digite o código recebido" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} />
+              <label style={label}>OTP code</label>
+              <input style={input} placeholder="Enter the code you received" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} />
             </div>
             <button style={btn} disabled={busy} onClick={doVerifyOtp}>
-              {busy ? "Validando..." : "Entrar no console"}
+              {busy ? "Verifying..." : "Enter console"}
+            </button>
+            <button
+              type="button"
+              style={secondaryBtn}
+              disabled={busy}
+              onClick={() => {
+                setOtpMode(false);
+                setOtpCode("");
+                setStatus("");
+              }}
+            >
+              Back
             </button>
           </div>
         )}
@@ -331,13 +456,13 @@ export default function AuthPage() {
               borderRadius: 16,
               padding: "12px 14px",
               fontSize: 14,
-              background: status.toLowerCase().includes("falha") || status.toLowerCase().includes("inválido")
+              background: status.toLowerCase().includes("failed") || status.toLowerCase().includes("invalid")
                 ? "rgba(239,68,68,0.10)"
                 : "rgba(37,99,235,0.08)",
-              color: status.toLowerCase().includes("falha") || status.toLowerCase().includes("inválido")
+              color: status.toLowerCase().includes("failed") || status.toLowerCase().includes("invalid")
                 ? "#991b1b"
                 : "#1e3a8a",
-              border: status.toLowerCase().includes("falha") || status.toLowerCase().includes("inválido")
+              border: status.toLowerCase().includes("failed") || status.toLowerCase().includes("invalid")
                 ? "1px solid rgba(239,68,68,0.25)"
                 : "1px solid rgba(37,99,235,0.18)",
             }}
