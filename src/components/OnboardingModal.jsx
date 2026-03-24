@@ -1,8 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { getTenant, getToken } from "../lib/auth.js";
 
-console.log("ONBOARDING MODAL BUILD 9d86116");
-
 const USER_TYPES = [
   { value: "founder", label: "Founder" },
   { value: "investor", label: "Investor" },
@@ -12,29 +10,29 @@ const USER_TYPES = [
 ];
 
 const INTENTS = [
-  { value: "explore", label: "Explorar a plataforma" },
-  { value: "meeting", label: "Agendar conversa" },
-  { value: "pilot", label: "Avaliar piloto" },
-  { value: "funding", label: "Discutir investimento" },
-  { value: "other", label: "Outro" },
+  { value: "explore", label: "Explore the platform" },
+  { value: "meeting", label: "Schedule a conversation" },
+  { value: "pilot", label: "Evaluate a pilot" },
+  { value: "funding", label: "Discuss investment" },
+  { value: "other", label: "Other" },
 ];
 
 const COUNTRIES = [
-  { value: "BR", label: "Brasil" },
-  { value: "US", label: "Estados Unidos" },
-  { value: "ES", label: "Espanha" },
+  { value: "BR", label: "Brazil" },
+  { value: "US", label: "United States" },
+  { value: "ES", label: "Spain" },
   { value: "PT", label: "Portugal" },
   { value: "AR", label: "Argentina" },
-  { value: "MX", label: "México" },
-  { value: "CO", label: "Colômbia" },
+  { value: "MX", label: "Mexico" },
+  { value: "CO", label: "Colombia" },
   { value: "CL", label: "Chile" },
-  { value: "UY", label: "Uruguai" },
-  { value: "OTHER", label: "Outro" },
+  { value: "UY", label: "Uruguay" },
+  { value: "OTHER", label: "Other" },
 ];
 
 const LANGUAGES = [
-  { value: "pt-BR", label: "Português (Brasil)" },
   { value: "en-US", label: "English (US)" },
+  { value: "pt-BR", label: "Português (Brasil)" },
   { value: "es-ES", label: "Español" },
   { value: "pt-PT", label: "Português (Portugal)" },
 ];
@@ -95,7 +93,7 @@ function suggestLanguage(country) {
 }
 
 function sanitizeOnboardingPayload(payload) {
-  const country = String(payload?.country || "").trim().toUpperCase() || "BR";
+  const country = String(payload?.country || "").trim().toUpperCase() || "US";
   return {
     company: String(payload?.company || "").trim(),
     role: String(payload?.role || payload?.profile_role || "").trim(),
@@ -232,8 +230,8 @@ export default function OnboardingModal({ user, onComplete }) {
       role: form.role || null,
       user_type: form.user_type || "other",
       intent: form.intent || "explore",
-      country: form.country || "BR",
-      language: form.language || suggestLanguage(form.country || "BR"),
+      country: form.country || "US",
+      language: form.language || suggestLanguage(form.country || "US"),
       whatsapp: normalizeWhatsapp(form.whatsapp || ""),
       notes: form.notes || null,
       onboarding_completed: true,
@@ -248,7 +246,7 @@ export default function OnboardingModal({ user, onComplete }) {
 
       const result = await saveOnboarding(payload, token, org);
       const nextUser = result?.user
-        ? { ...user, ...result.user }
+        ? { ...user, ...result.user, onboarding_completed: true }
         : {
             ...user,
             company: payload.company,
@@ -309,13 +307,13 @@ export default function OnboardingModal({ user, onComplete }) {
               fontWeight: 800,
             }}
           >
-            Summit private mode
+            Orkio
           </div>
           <h2 style={{ margin: "8px 0 6px", fontSize: 30, lineHeight: 1.1 }}>
-            Complete seu onboarding
+            Complete your onboarding
           </h2>
           <p style={{ margin: 0, color: "#475569", lineHeight: 1.55 }}>
-            País, idioma e WhatsApp agora fazem parte do cadastro inicial para personalizar a experiência e o acompanhamento.
+            Tell us a bit about your context so we can personalize your console experience from the first session.
           </p>
         </div>
 
@@ -331,28 +329,28 @@ export default function OnboardingModal({ user, onComplete }) {
             lineHeight: 1.5,
           }}
         >
-          Preencha os campos abaixo. O formulário foi ajustado para alto contraste e melhor leitura em desktop e mobile.
+          This step appears only once. You can adjust the language later inside the console if needed.
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
           <div>
-            <label style={labelStyle}>Nome completo</label>
+            <label style={labelStyle}>Full name</label>
             <input value={fullName} readOnly style={{ ...fieldStyle, opacity: 0.85 }} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
             <div>
-              <label style={labelStyle}>Empresa</label>
+              <label style={labelStyle}>Company</label>
               <input
                 value={form.company}
                 onChange={(e) => setField("company", e.target.value)}
-                placeholder="Sua empresa"
+                placeholder="Your company"
                 style={fieldStyle}
               />
             </div>
 
             <div>
-              <label style={labelStyle}>Papel / cargo</label>
+              <label style={labelStyle}>Role / title</label>
               <input
                 value={form.role}
                 onChange={(e) => setField("role", e.target.value)}
@@ -364,7 +362,7 @@ export default function OnboardingModal({ user, onComplete }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
             <div>
-              <label style={labelStyle}>Perfil</label>
+              <label style={labelStyle}>Profile</label>
               <select
                 value={form.user_type}
                 onChange={(e) => setField("user_type", e.target.value || "other")}
@@ -379,7 +377,7 @@ export default function OnboardingModal({ user, onComplete }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Objetivo principal</label>
+              <label style={labelStyle}>Primary goal</label>
               <select
                 value={form.intent}
                 onChange={(e) => setField("intent", e.target.value || "explore")}
@@ -396,16 +394,16 @@ export default function OnboardingModal({ user, onComplete }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
             <div>
-              <label style={labelStyle}>País</label>
+              <label style={labelStyle}>Country</label>
               <select
                 value={form.country}
                 onChange={(e) => {
-                  const nextCountry = e.target.value || "BR";
+                  const nextCountry = e.target.value || "US";
                   setForm((prev) => ({
                     ...prev,
                     country: nextCountry,
                     language:
-                      !prev.language || prev.language === suggestLanguage(prev.country || "BR")
+                      !prev.language || prev.language === suggestLanguage(prev.country || "US")
                         ? suggestLanguage(nextCountry)
                         : prev.language,
                   }));
@@ -421,7 +419,7 @@ export default function OnboardingModal({ user, onComplete }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Idioma</label>
+              <label style={labelStyle}>Language</label>
               <select
                 value={form.language}
                 onChange={(e) => setField("language", e.target.value || suggestLanguage(form.country))}
@@ -441,18 +439,18 @@ export default function OnboardingModal({ user, onComplete }) {
             <input
               value={form.whatsapp}
               onChange={(e) => setField("whatsapp", normalizeWhatsapp(e.target.value))}
-              placeholder="+55 51 99999-9999"
+              placeholder="+1 555 000 0000"
               style={fieldStyle}
               inputMode="tel"
             />
           </div>
 
           <div>
-            <label style={labelStyle}>Contexto adicional</label>
+            <label style={labelStyle}>Additional context</label>
             <textarea
               value={form.notes}
               onChange={(e) => setField("notes", e.target.value)}
-              placeholder="Conte em uma frase o que você quer resolver ou explorar."
+              placeholder="In one sentence, tell us what you want to solve or explore."
               style={{ ...fieldStyle, minHeight: 120, resize: "vertical" }}
             />
           </div>
@@ -485,7 +483,7 @@ export default function OnboardingModal({ user, onComplete }) {
           }}
         >
           <div style={{ color: "#64748b", fontSize: 13 }}>
-            Este passo aparece apenas uma vez após seu acesso aprovado.
+            Your preferred language can be updated later inside the console settings.
           </div>
 
           <button
@@ -505,7 +503,7 @@ export default function OnboardingModal({ user, onComplete }) {
               opacity: busy ? 0.75 : 1,
             }}
           >
-            {busy ? "Salvando..." : "Continuar"}
+            {busy ? "Saving..." : "Continue to console"}
           </button>
         </div>
       </form>
