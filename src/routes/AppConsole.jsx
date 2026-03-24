@@ -43,6 +43,19 @@ function logRealtimeStep(step, payload = undefined) {
 }
 
 
+function hasAdminAccess(userObj) {
+  if (!userObj) return false;
+  const role = String(userObj?.role || "").trim().toLowerCase();
+  return !!(
+    role === "admin"
+    || role === "owner"
+    || role === "superadmin"
+    || userObj?.is_admin === true
+    || userObj?.admin === true
+  );
+}
+
+
 
 // Icons (inline SVG)
 const IconPlus = () => (
@@ -298,14 +311,7 @@ React.useEffect(() => {
   const [tenant, setTenant] = useState(getTenant() || "public");
   const [token, setToken] = useState(getToken());
   const [user, setUser] = useState(getUser());
-  const canAccessAdmin = Boolean(
-    isAdmin(user)
-    || user?.role === "admin"
-    || user?.role === "owner"
-    || user?.role === "superadmin"
-    || user?.is_admin === true
-    || user?.admin === true
-  );
+  const canAccessAdmin = hasAdminAccess(user);
 
 const [onboardingChecked, setOnboardingChecked] = useState(false);
 const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -495,18 +501,13 @@ useEffect(() => {
           country: data?.country ?? u?.country ?? null,
           language: data?.language ?? u?.language ?? null,
           whatsapp: data?.whatsapp ?? u?.whatsapp ?? null,
-          is_admin: (
-            data?.is_admin === true
-            || data?.admin === true
-            || u?.is_admin === true
-            || u?.admin === true
-            || data?.role === "admin"
-            || data?.role === "owner"
-            || data?.role === "superadmin"
-            || u?.role === "admin"
-            || u?.role === "owner"
-            || u?.role === "superadmin"
-          ),
+          is_admin: hasAdminAccess({
+            ...(u || {}),
+            ...data,
+            role: data?.role || u?.role || "user",
+            is_admin: data?.is_admin === true || u?.is_admin === true,
+            admin: data?.admin === true || u?.admin === true,
+          }),
         };
         mergedUser.admin = mergedUser.is_admin === true;
 
@@ -566,30 +567,22 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function checkHealth() {
       try {
-      // stop batch flush timer
-      if (rtcFlushTimerRef.current) { try { clearInterval(rtcFlushTimerRef.current); } catch {} rtcFlushTimerRef.current = null; }
-
-      // best-effort flush + close session on server
-      const sid = rtcSessionIdRef.current;
-      rtcSessionIdRef.current = null;
-      if (sid) {
-        const pending = rtcEventQueueRef.current || [];
-        rtcEventQueueRef.current = [];
-        if (pending.length) {
-          postRealtimeEventsBatch({ session_id: sid, events: pending }).catch(() => {});
-        }
-        endRealtimeSession({ session_id: sid, ended_at: Date.now(), meta: { reason: "client_stop" } }).catch(() => {});
-      }
-
         await apiFetch("/api/health", { token, org: tenant });
-        setHealth("ok");
+        if (!cancelled) setHealth("ok");
       } catch {
-        setHealth("down");
+        if (!cancelled) setHealth("down");
       }
     }
+
     if (token) checkHealth();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token, tenant]);
 
   function scrollToBottom() {
