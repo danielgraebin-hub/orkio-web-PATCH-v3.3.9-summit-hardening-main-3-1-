@@ -2540,28 +2540,28 @@ async function stopRealtime(reason = 'client_stop') {
         maxWidth: 820,
         padding: isMobile ? 20 : 28,
         borderRadius: 28,
-        background: "#f8fafc",
-        color: "#0f172a",
-        border: "1px solid rgba(15,23,42,0.08)",
-        boxShadow: "0 28px 80px rgba(15,23,42,0.22)",
+        background: "linear-gradient(180deg, rgba(17,24,39,0.98), rgba(3,7,18,0.98))",
+        color: "#ffffff",
+        border: "1px solid rgba(255,255,255,0.12)",
+        boxShadow: "0 28px 80px rgba(0,0,0,0.42)",
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#475569", marginBottom: 8, fontWeight: 800 }}>
+      <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)", marginBottom: 8, fontWeight: 800 }}>
         Summit private mode
       </div>
-      <div style={{ fontSize: isMobile ? 26 : 34, fontWeight: 900, lineHeight: 1.05, marginBottom: 8 }}>
+      <div style={{ fontSize: isMobile ? 26 : 34, fontWeight: 900, lineHeight: 1.05, marginBottom: 8, color: "#fff" }}>
         Complete seu onboarding
       </div>
-      <div style={{ color: "#475569", lineHeight: 1.6, fontSize: 15 }}>
+      <div style={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.6, fontSize: 15 }}>
         Antes de continuar, precisamos de algumas informações para personalizar a experiência, o idioma e o acompanhamento comercial.
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginTop: 20 }}>
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Empresa</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>Empresa</label>
           <input
-            style={{ ...styles.input, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.company}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, company: e.target.value }))}
             placeholder="Nome da empresa"
@@ -2569,9 +2569,9 @@ async function stopRealtime(reason = 'client_stop') {
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Seu papel</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>Seu papel</label>
           <input
-            style={{ ...styles.input, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.role}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, role: e.target.value }))}
             placeholder="Founder, CEO, CTO, Investidor..."
@@ -2579,65 +2579,65 @@ async function stopRealtime(reason = 'client_stop') {
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Perfil *</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>Perfil *</label>
           <select
-            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.user_type}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, user_type: e.target.value }))}
           >
-            <option value="">Selecione</option>
+            <option value="" style={{ background: "#0f172a", color: "#fff" }}>Selecione</option>
             {ONBOARDING_USER_TYPES.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value} style={{ background: "#0f172a", color: "#fff" }}>{item.label}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Objetivo principal *</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>Objetivo principal *</label>
           <select
-            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.intent}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, intent: e.target.value }))}
           >
-            <option value="">Selecione</option>
+            <option value="" style={{ background: "#0f172a", color: "#fff" }}>Selecione</option>
             {ONBOARDING_INTENTS.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value} style={{ background: "#0f172a", color: "#fff" }}>{item.label}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>País *</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>País *</label>
           <select
-            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.country || ""}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, country: e.target.value }))}
           >
-            <option value="">Selecione</option>
+            <option value="" style={{ background: "#0f172a", color: "#fff" }}>Selecione</option>
             {ONBOARDING_COUNTRIES.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value} style={{ background: "#0f172a", color: "#fff" }}>{item.label}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Idioma *</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>Idioma *</label>
           <select
-            style={{ ...styles.select, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.select, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.language || ""}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, language: e.target.value }))}
           >
-            <option value="">Selecione</option>
+            <option value="" style={{ background: "#0f172a", color: "#fff" }}>Selecione</option>
             {ONBOARDING_LANGUAGES.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value} style={{ background: "#0f172a", color: "#fff" }}>{item.label}</option>
             ))}
           </select>
         </div>
 
         <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>WhatsApp</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>WhatsApp</label>
           <input
-            style={{ ...styles.input, background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.input, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.whatsapp || ""}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, whatsapp: e.target.value }))}
             placeholder="+55 51 99999-9999"
@@ -2645,9 +2645,9 @@ async function stopRealtime(reason = 'client_stop') {
         </div>
 
         <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Contexto adicional</label>
+          <label style={{ display: "block", marginBottom: 8, color: "#fff", fontWeight: 800 }}>Contexto adicional</label>
           <textarea
-            style={{ ...styles.input, minHeight: 120, resize: "vertical", background: "#fff", borderColor: "#cbd5e1", color: "#0f172a" }}
+            style={{ ...styles.input, minHeight: 120, resize: "vertical", background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.14)", color: "#fff", WebkitTextFillColor: "#fff" }}
             value={onboardingForm.notes}
             onChange={(e) => setOnboardingForm((prev) => ({ ...prev, notes: e.target.value }))}
             placeholder="Conte em uma frase o que você quer resolver ou explorar."
@@ -2660,11 +2660,11 @@ async function stopRealtime(reason = 'client_stop') {
           style={{
             marginTop: 16,
             fontSize: 14,
-            color: "#1e3a8a",
+            color: "#ffffff",
             borderRadius: 16,
             padding: "12px 14px",
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.12)",
           }}
         >
           {onboardingStatus}
@@ -2672,7 +2672,7 @@ async function stopRealtime(reason = 'client_stop') {
       ) : null}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 20, flexDirection: isMobile ? "column" : "row" }}>
-        <div style={{ color: "#64748b", fontSize: 13 }}>
+        <div style={{ color: "rgba(255,255,255,0.62)", fontSize: 13 }}>
           Este passo aparece apenas uma vez após seu acesso aprovado.
         </div>
         <button
@@ -2685,7 +2685,7 @@ async function stopRealtime(reason = 'client_stop') {
             minHeight: 52,
             fontSize: 16,
             fontWeight: 800,
-            background: "linear-gradient(135deg, #2563eb, #0f172a)",
+            background: "linear-gradient(135deg, rgba(124,92,255,0.92), rgba(37,99,235,0.92))",
             color: "#fff",
           }}
           onClick={submitOnboarding}
