@@ -31,7 +31,7 @@ function RequireGuest({ children }) {
   const token = getToken();
   const user = getUser();
   if (token && isApproved(user)) {
-    return <Navigate to={user?.role === "admin" ? "/admin" : "/app"} replace />;
+    return <Navigate to={isAdmin(user) ? "/admin" : "/app"} replace />;
   }
   return children;
 }
