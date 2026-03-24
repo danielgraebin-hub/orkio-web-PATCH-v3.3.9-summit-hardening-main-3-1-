@@ -9,8 +9,8 @@ import {
   completeOtpLogin,
   getToken,
   getUser,
-  isAdmin,
   isApproved,
+  isAdmin,
 } from "../lib/auth.js";
 
 const shell = {
@@ -68,35 +68,6 @@ const secondaryBtn = {
 };
 const muted = { color: "#64748b", fontSize: 14, lineHeight: 1.5 };
 
-
-const POST_AUTH_REDIRECT_KEY = "post_auth_redirect";
-
-function normalizeRedirectPath(pathname) {
-  const raw = String(pathname || "").trim();
-  if (!raw) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null;
-  if (raw.startsWith("/auth")) return null;
-  return raw;
-}
-
-function consumePostAuthRedirect() {
-  try {
-    const value = sessionStorage.getItem(POST_AUTH_REDIRECT_KEY);
-    if (value) {
-      sessionStorage.removeItem(POST_AUTH_REDIRECT_KEY);
-    }
-    return normalizeRedirectPath(value);
-  } catch {
-    return null;
-  }
-}
-
-function resolvePostAuthDestination(user) {
-  return consumePostAuthRedirect() || (isAdmin(user) ? "/admin" : "/app");
-}
-
-
 export default function AuthPage() {
   const nav = useNavigate();
   const [tenant] = useState("public");
@@ -121,7 +92,9 @@ export default function AuthPage() {
     const token = getToken();
     const user = getUser();
     if (token && user && isApproved(user)) {
-      const next = resolvePostAuthDestination(user);
+      const redirect = sessionStorage.getItem("post_auth_redirect");
+      const next = redirect || (isAdmin(user) ? "/admin" : "/app");
+      sessionStorage.removeItem("post_auth_redirect");
       nav(next, { replace: true });
     }
   }, [nav]);
@@ -174,6 +147,13 @@ export default function AuthPage() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   }
 
+  function goToConsole() {
+    const user = getUser();
+    const next = isAdmin(user) ? "/admin" : "/app";
+    nav(next);
+  }
+
+
   async function finalizeSession(data, resolvedTenant) {
     const nextTenant = resolvedTenant || tenant || "public";
     setTenant(nextTenant);
@@ -184,10 +164,10 @@ export default function AuthPage() {
 
     completeOtpLogin({ ...data, tenant: nextTenant });
 
-    const nextUser = data?.user || getUser();
-    const nextPath = resolvePostAuthDestination(nextUser);
-
-    nav(nextPath, { replace: true });
+    const redirect = sessionStorage.getItem("post_auth_redirect");
+    const next = redirect || (isAdmin(data?.user) ? "/admin" : "/app");
+    sessionStorage.removeItem("post_auth_redirect");
+    nav(next, { replace: true });
   }
 
   async function doRegister() {
