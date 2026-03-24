@@ -153,7 +153,6 @@ export default function AuthPage() {
     nav(next);
   }
 
-
   async function finalizeSession(data, resolvedTenant) {
     const nextTenant = resolvedTenant || tenant || "public";
     setTenant(nextTenant);
@@ -164,8 +163,10 @@ export default function AuthPage() {
 
     completeOtpLogin({ ...data, tenant: nextTenant });
 
+    const storedUser = getUser();
     const redirect = sessionStorage.getItem("post_auth_redirect");
-    const next = redirect || (isAdmin(data?.user) ? "/admin" : "/app");
+    const next = redirect || (isAdmin(storedUser) ? "/admin" : "/app");
+
     sessionStorage.removeItem("post_auth_redirect");
     nav(next, { replace: true });
   }
