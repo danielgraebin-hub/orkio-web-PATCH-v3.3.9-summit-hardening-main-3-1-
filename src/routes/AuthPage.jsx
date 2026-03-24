@@ -110,7 +110,7 @@ export default function AuthPage() {
     const user = getUser();
     if (token && user && isApproved(user)) {
       const redirect = sessionStorage.getItem("post_auth_redirect");
-      const next = redirect || (isAdmin(user) ? "/admin" : "/app");
+      const next = isAdmin(user) ? "/admin" : (redirect || "/app");
       sessionStorage.removeItem("post_auth_redirect");
       nav(next, { replace: true });
     }
@@ -180,7 +180,7 @@ export default function AuthPage() {
 
     const storedUser = getUser();
     const redirect = sessionStorage.getItem("post_auth_redirect");
-    const next = redirect || (isAdmin(storedUser) ? "/admin" : "/app");
+    const next = isAdmin(storedUser) ? "/admin" : (redirect || "/app");
 
     sessionStorage.removeItem("post_auth_redirect");
     nav(next, { replace: true });
