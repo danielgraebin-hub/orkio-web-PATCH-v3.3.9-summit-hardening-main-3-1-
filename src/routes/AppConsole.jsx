@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, uploadFile, chat, chatStream, transcribeAudio, requestFounderHandoff, getRealtimeClientSecret, startRealtimeSession, startSummitSession, postRealtimeEventsBatch, endRealtimeSession, getRealtimeSession, getSummitSessionScore, submitSummitSessionReview, downloadRealtimeAta as downloadRealtimeAtaFile, guardRealtimeTranscript } from "../ui/api.js";
-import { clearSession, getTenant, getToken, getUser, isAdmin, setSession, logout } from "../lib/auth.js";
+import { clearSession, getTenant, getToken, getUser, isAdmin, isApproved, setSession, logout } from "../lib/auth.js";
 import { ORKIO_VOICES, coerceVoiceId } from "../lib/voices.js";
 import TermsModal from "../ui/TermsModal.jsx";
 import PWAInstallPrompt from "../components/PWAInstallPrompt.jsx";
@@ -476,31 +476,33 @@ useEffect(() => {
       const { data } = await apiFetch("/api/me", { method: "GET", token: t, org });
       if (!alive) return;
       if (data) {
-        setUser(data);
-        try { setSession({ token: t, user: data, tenant: org }); } catch {}
+        const mergedUser = {
+          ...(u || {}),
+          ...data,
+          org_slug: data?.org_slug || u?.org_slug || org,
+          signup_source: data?.signup_source ?? u?.signup_source ?? null,
+          signup_code_label: data?.signup_code_label ?? u?.signup_code_label ?? null,
+          product_scope: data?.product_scope ?? u?.product_scope ?? null,
+          country: data?.country ?? u?.country ?? null,
+          language: data?.language ?? u?.language ?? null,
+          whatsapp: data?.whatsapp ?? u?.whatsapp ?? null,
+        };
 
-        const summitApproved =
-          data &&
-          (
-            data.role === "admin" ||
-            !!data.approved_at ||
-            String(data.usage_tier || "").startsWith("summit_") ||
-            String(data.signup_source || "").toLowerCase() === "investor" ||
-            String(data.signup_code_label || "").toLowerCase() === "efata777"
-          );
+        setUser(mergedUser);
+        try { setSession({ token: t, user: mergedUser, tenant: mergedUser.org_slug || org }); } catch {}
 
-        if (!summitApproved) {
+        if (!isApproved(mergedUser)) {
           clearSession();
           nav("/auth?pending_approval=1");
           return;
         }
 
-        if (!data?.onboarding_completed) {
-          setOnboardingForm(sanitizeOnboardingForm(data));
+        if (!mergedUser?.onboarding_completed) {
+          setOnboardingForm(sanitizeOnboardingForm(mergedUser));
           setOnboardingOpen(true);
         }
 
-        if (!data?.terms_accepted_at) {
+        if (!mergedUser?.terms_accepted_at) {
           setShowTermsModal(true);
         }
       }
@@ -634,7 +636,7 @@ useEffect(() => {
   async function loadMessages(tid) {
     if (!tid) return [];
     try {
-      const { data } = await apiFetch(`/api/messages?thread_id=${encodeURIComponent(tid)}`, { token, org: tenant });
+      const { data } = await apiFetch(`/api/messages?thread_id=${encodeURIComponent(tid)}&include_welcome=0`, { token, org: tenant });
       setMessages(data || []);
       return (data || []);
     } catch (e) {
@@ -2532,7 +2534,7 @@ async function stopRealtime(reason = 'client_stop') {
         onComplete={(nextUser) => {
           const mergedUser = nextUser || { ...(user || {}), onboarding_completed: true };
           setUser(mergedUser);
-          try { setSession({ token, user: mergedUser, tenant }); } catch {}
+          try { setSession({ token, user: mergedUser, tenant: mergedUser?.org_slug || tenant }); } catch {}
           setOnboardingOpen(false);
           setOnboardingStatus("");
           setUploadStatus("✅ Onboarding concluído.");
