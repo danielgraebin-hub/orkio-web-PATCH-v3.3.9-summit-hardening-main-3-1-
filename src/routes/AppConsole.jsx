@@ -313,6 +313,13 @@ React.useEffect(() => {
   const [user, setUser] = useState(getUser());
   const canAccessAdmin = hasAdminAccess(user);
 
+  useEffect(() => {
+    try {
+      console.log("ADMIN_RUNTIME_USER", user);
+      console.log("ADMIN_RUNTIME_CAN_ACCESS", canAccessAdmin);
+    } catch {}
+  }, [user, canAccessAdmin]);
+
 const [onboardingChecked, setOnboardingChecked] = useState(false);
 const [onboardingOpen, setOnboardingOpen] = useState(false);
 const [onboardingBusy, setOnboardingBusy] = useState(false);
@@ -404,6 +411,7 @@ const rtcLastUserActivityAtRef = useRef(0);
   const rtcThreadIdRef = useRef(null);
   const rtcEventQueueRef = useRef([]);
   const rtcFlushTimerRef = useRef(null);
+  const rtcConnectingRef = useRef(false);
   // PATCH0100_27_2B: UI log + punct status
   const [rtcAuditEvents, setRtcAuditEvents] = useState([]);
   const [rtcPunctStatus, setRtcPunctStatus] = useState(null); // null | 'pending' | 'done' | 'timeout'
@@ -1425,14 +1433,29 @@ function scheduleRealtimeIdleFollowup() {
   }
 
   async function startRealtime() {
+    if (rtcConnectingRef.current) {
+      console.warn("[Realtime] start skipped: already connecting");
+      logRealtimeStep("start:skip_connecting");
+      return;
+    }
+
+    if (rtcSessionIdRef.current && rtcPcRef.current && rtcDcRef.current) {
+      console.warn("[Realtime] start skipped: active session already present", { sessionId: rtcSessionIdRef.current });
+      logRealtimeStep("start:skip_active_session", { sessionId: rtcSessionIdRef.current });
+      return;
+    }
+
+    rtcConnectingRef.current = true;
+
     try {
       logRealtimeStep('start:begin', { threadId, destSingle, summitRuntimeMode: summitRuntimeModeRef.current, summitLanguageProfile: summitLanguageProfileRef.current });
       setV2vError(null);
       setV2vPhase('connecting');
       setUploadStatus('⚡ Conectando Realtime (WebRTC)...');
 
-      // Close any previous session
-      await stopRealtime('restart');
+      if (rtcSessionIdRef.current || rtcPcRef.current || rtcDcRef.current) {
+        await stopRealtime('restart_existing_session');
+      }
 
       try { setRtcAuditEvents([]); } catch {}
       try { setRtcPunctStatus(null); } catch {}
@@ -1757,6 +1780,8 @@ function scheduleRealtimeIdleFollowup() {
       setUploadStatus('❌ Realtime: ' + (e?.message || 'falha'));
       setTimeout(() => setUploadStatus(''), 4000);
       await stopRealtime('start_error_diagnostic_cleanup');
+    } finally {
+      rtcConnectingRef.current = false;
     }
   }
 
@@ -1943,6 +1968,10 @@ function scheduleRealtimeIdleFollowup() {
 
 async function stopRealtime(reason = 'client_stop') {
     const sid = rtcSessionIdRef.current;
+    try {
+      console.log("REALTIME_STOP_REASON", reason, { sessionId: sid });
+    } catch {}
+    rtcConnectingRef.current = false;
     try {
       clearRealtimeResponseTimeout();
       clearRealtimeIdleFollowup();
