@@ -9,6 +9,7 @@ import {
   completeOtpLogin,
   getToken,
   getUser,
+  isAdmin,
   isApproved,
 } from "../lib/auth.js";
 
@@ -67,6 +68,35 @@ const secondaryBtn = {
 };
 const muted = { color: "#64748b", fontSize: 14, lineHeight: 1.5 };
 
+
+const POST_AUTH_REDIRECT_KEY = "post_auth_redirect";
+
+function normalizeRedirectPath(pathname) {
+  const raw = String(pathname || "").trim();
+  if (!raw) return null;
+  if (!raw.startsWith("/")) return null;
+  if (raw.startsWith("//")) return null;
+  if (raw.startsWith("/auth")) return null;
+  return raw;
+}
+
+function consumePostAuthRedirect() {
+  try {
+    const value = sessionStorage.getItem(POST_AUTH_REDIRECT_KEY);
+    if (value) {
+      sessionStorage.removeItem(POST_AUTH_REDIRECT_KEY);
+    }
+    return normalizeRedirectPath(value);
+  } catch {
+    return null;
+  }
+}
+
+function resolvePostAuthDestination(user) {
+  return consumePostAuthRedirect() || (isAdmin(user) ? "/admin" : "/app");
+}
+
+
 export default function AuthPage() {
   const nav = useNavigate();
   const [tenant] = useState("public");
@@ -91,7 +121,8 @@ export default function AuthPage() {
     const token = getToken();
     const user = getUser();
     if (token && user && isApproved(user)) {
-      nav("/app", { replace: true });
+      const next = resolvePostAuthDestination(user);
+      nav(next, { replace: true });
     }
   }, [nav]);
 
@@ -152,7 +183,11 @@ export default function AuthPage() {
     }
 
     completeOtpLogin({ ...data, tenant: nextTenant });
-    nav("/app", { replace: true });
+
+    const nextUser = data?.user || getUser();
+    const nextPath = resolvePostAuthDestination(nextUser);
+
+    nav(nextPath, { replace: true });
   }
 
   async function doRegister() {
