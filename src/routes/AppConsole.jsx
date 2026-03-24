@@ -5,6 +5,7 @@ import { clearSession, getTenant, getToken, getUser, isAdmin, setSession, logout
 import { ORKIO_VOICES, coerceVoiceId } from "../lib/voices.js";
 import TermsModal from "../ui/TermsModal.jsx";
 import PWAInstallPrompt from "../components/PWAInstallPrompt.jsx";
+import OnboardingModal from "../components/OnboardingModal.jsx";
 import { startSessionHeartbeat } from "../lib/sessionHeartbeat.js";
 
 const ORKIO_ENV = (typeof window !== "undefined" && window.__ORKIO_ENV__) ? window.__ORKIO_ENV__ : {};
@@ -671,42 +672,8 @@ useEffect(() => {
   useEffect(() => { if (threadId) loadMessages(threadId); }, [threadId]);
 
 
-async function submitOnboarding() {
-  if (onboardingBusy) return;
-  const payload = sanitizeOnboardingForm(onboardingForm);
-  const safePayload = {
-    ...payload,
-    user_type: payload.user_type || "other",
-    intent: payload.intent || "explore",
-    country: payload.country || "BR",
-    language: payload.language || suggestOnboardingLanguage(payload.country || "BR"),
-    whatsapp: normalizeWhatsapp(payload.whatsapp || ""),
-    onboarding_completed: true,
-  };
 
-  setOnboardingBusy(true);
-  setOnboardingStatus("Salvando seu onboarding...");
-  try {
-    const { data } = await apiFetch("/api/user/onboarding", {
-      method: "POST",
-      token,
-      org: tenant,
-      body: safePayload,
-    });
 
-    const nextUser = data?.user || { ...(user || {}), ...safePayload, profile_role: safePayload.role, onboarding_completed: true };
-    setUser(nextUser);
-    try { setSession({ token, user: nextUser, tenant }); } catch {}
-    setOnboardingOpen(false);
-    setOnboardingStatus("");
-    setUploadStatus("✅ Onboarding concluído.");
-    setTimeout(() => setUploadStatus(""), 1800);
-  } catch (e) {
-    setOnboardingStatus(e?.message || "Falha ao salvar onboarding.");
-  } finally {
-    setOnboardingBusy(false);
-  }
-}
 
 
   async function createThread() {
@@ -2560,195 +2527,19 @@ async function stopRealtime(reason = 'client_stop') {
     )}
 
 {onboardingOpen && (
-  <div style={styles.modalBack} onClick={(e) => e.stopPropagation()}>
-    <div
-      style={{
-        width: "100%",
-        maxWidth: 860,
-        padding: isMobile ? 18 : 28,
-        borderRadius: 28,
-        background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-        color: "#0f172a",
-        border: "1px solid rgba(15,23,42,0.08)",
-        boxShadow: "0 28px 80px rgba(0,0,0,0.30)",
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#475569", marginBottom: 8, fontWeight: 800 }}>
-        Summit private mode
-      </div>
-      <div style={{ fontSize: isMobile ? 26 : 34, fontWeight: 900, lineHeight: 1.05, marginBottom: 8, color: "#0f172a" }}>
-        Complete seu onboarding
-      </div>
-      <div style={{ color: "#475569", lineHeight: 1.6, fontSize: 15 }}>
-        Antes de continuar, precisamos de algumas informações para personalizar sua experiência, idioma de atendimento e acompanhamento comercial.
-      </div>
-
-      <div
-        style={{
-          marginTop: 18,
-          padding: isMobile ? 14 : 16,
-          borderRadius: 18,
-          border: "1px solid #dbeafe",
-          background: "linear-gradient(135deg, rgba(37,99,235,0.08), rgba(124,92,255,0.08))",
-          color: "#334155",
-          fontSize: 14,
-          lineHeight: 1.55,
+      <OnboardingModal
+        user={user}
+        onComplete={(nextUser) => {
+          const mergedUser = nextUser || { ...(user || {}), onboarding_completed: true };
+          setUser(mergedUser);
+          try { setSession({ token, user: mergedUser, tenant }); } catch {}
+          setOnboardingOpen(false);
+          setOnboardingStatus("");
+          setUploadStatus("✅ Onboarding concluído.");
+          setTimeout(() => setUploadStatus(""), 1800);
         }}
-      >
-        Preencha os campos abaixo. País, idioma e WhatsApp agora fazem parte do cadastro inicial.
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16, marginTop: 20 }}>
-        <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Empresa</label>
-          <input
-            style={{ ...styles.input, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)" }}
-            value={onboardingForm.company}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, company: e.target.value }))}
-            placeholder="Nome da empresa"
-          />
-        </div>
-
-        <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Seu papel</label>
-          <input
-            style={{ ...styles.input, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)" }}
-            value={onboardingForm.role}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, role: e.target.value }))}
-            placeholder="Founder, CEO, CTO, Investidor..."
-          />
-        </div>
-
-        <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Perfil *</label>
-          <select
-            style={{ ...styles.select, minHeight: 48, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", fontSize: 14 }}
-            value={onboardingForm.user_type}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, user_type: e.target.value || "other" }))}
-          >
-            <option value="other" style={{ background: "#ffffff", color: "#0f172a" }}>Selecione</option>
-            {ONBOARDING_USER_TYPES.map((item) => (
-              <option key={item.value} value={item.value} style={{ background: "#ffffff", color: "#0f172a" }}>{item.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Objetivo principal *</label>
-          <select
-            style={{ ...styles.select, minHeight: 48, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", fontSize: 14 }}
-            value={onboardingForm.intent}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, intent: e.target.value || "explore" }))}
-          >
-            <option value="explore" style={{ background: "#ffffff", color: "#0f172a" }}>Selecione</option>
-            {ONBOARDING_INTENTS.map((item) => (
-              <option key={item.value} value={item.value} style={{ background: "#ffffff", color: "#0f172a" }}>{item.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>País *</label>
-          <select
-            style={{ ...styles.select, minHeight: 48, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", fontSize: 14 }}
-            value={onboardingForm.country || "BR"}
-            onChange={(e) => {
-              const nextCountry = e.target.value || "BR";
-              setOnboardingForm((prev) => {
-                const next = { ...prev, country: nextCountry };
-                if (!prev.language || prev.language === suggestOnboardingLanguage(prev.country || "BR")) {
-                  next.language = suggestOnboardingLanguage(nextCountry);
-                }
-                return next;
-              });
-            }}
-          >
-            {ONBOARDING_COUNTRIES.map((item) => (
-              <option key={item.value} value={item.value} style={{ background: "#ffffff", color: "#0f172a" }}>{item.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Idioma *</label>
-          <select
-            style={{ ...styles.select, minHeight: 48, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", fontSize: 14 }}
-            value={onboardingForm.language || suggestOnboardingLanguage(onboardingForm.country || "BR")}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, language: e.target.value || suggestOnboardingLanguage(prev.country || "BR") }))}
-          >
-            {ONBOARDING_LANGUAGES.map((item) => (
-              <option key={item.value} value={item.value} style={{ background: "#ffffff", color: "#0f172a" }}>{item.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>WhatsApp</label>
-          <input
-            style={{ ...styles.input, background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)" }}
-            value={onboardingForm.whatsapp || ""}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, whatsapp: normalizeWhatsapp(e.target.value) }))}
-            placeholder="+55 51 99999-9999"
-            inputMode="tel"
-          />
-        </div>
-
-        <div style={{ gridColumn: isMobile ? "auto" : "1 / span 2" }}>
-          <label style={{ display: "block", marginBottom: 8, color: "#0f172a", fontWeight: 800 }}>Contexto adicional</label>
-          <textarea
-            style={{ ...styles.input, minHeight: 120, resize: "vertical", background: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a", WebkitTextFillColor: "#0f172a", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)" }}
-            value={onboardingForm.notes}
-            onChange={(e) => setOnboardingForm((prev) => ({ ...prev, notes: e.target.value }))}
-            placeholder="Conte em uma frase o que você quer resolver ou explorar."
-          />
-        </div>
-      </div>
-
-      {onboardingStatus ? (
-        <div
-          style={{
-            marginTop: 16,
-            fontSize: 14,
-            color: "#0f172a",
-            borderRadius: 16,
-            padding: "12px 14px",
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
-          }}
-        >
-          {onboardingStatus}
-        </div>
-      ) : null}
-
-      <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between", gap: 12, marginTop: 20, flexDirection: isMobile ? "column" : "row" }}>
-        <div style={{ color: "#64748b", fontSize: 13 }}>
-          Este passo aparece apenas uma vez após seu acesso aprovado.
-        </div>
-        <button
-          type="button"
-          style={{
-            ...styles.btn,
-            ...styles.btnPrimary,
-            opacity: onboardingBusy ? 0.75 : 1,
-            minWidth: isMobile ? "100%" : 260,
-            minHeight: 52,
-            fontSize: 16,
-            fontWeight: 800,
-            background: "linear-gradient(135deg, #2563eb, #7c3aed)",
-            border: "1px solid rgba(37,99,235,0.35)",
-            color: "#ffffff",
-            boxShadow: "0 14px 30px rgba(37,99,235,0.25)",
-          }}
-          onClick={submitOnboarding}
-          disabled={onboardingBusy}
-        >
-          {onboardingBusy ? "Salvando..." : "Continuar"}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      />
+    )}
     <div style={styles.layout}>
       {/* Sidebar */}
       <div style={{ ...styles.sidebar, display: isMobile ? "none" : "flex" }}>
