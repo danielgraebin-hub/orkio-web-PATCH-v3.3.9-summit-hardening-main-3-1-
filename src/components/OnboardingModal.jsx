@@ -93,7 +93,7 @@ function suggestLanguage(country) {
 }
 
 function sanitizeOnboardingPayload(payload) {
-  const country = String(payload?.country || "").trim().toUpperCase() || "US";
+  const country = String(payload?.country || "").trim().toUpperCase() || "BR";
   return {
     company: String(payload?.company || "").trim(),
     role: String(payload?.role || payload?.profile_role || "").trim(),
@@ -230,8 +230,8 @@ export default function OnboardingModal({ user, onComplete }) {
       role: form.role || null,
       user_type: form.user_type || "other",
       intent: form.intent || "explore",
-      country: form.country || "US",
-      language: form.language || suggestLanguage(form.country || "US"),
+      country: form.country || "BR",
+      language: form.language || suggestLanguage(form.country || "BR"),
       whatsapp: normalizeWhatsapp(form.whatsapp || ""),
       notes: form.notes || null,
       onboarding_completed: true,
@@ -242,7 +242,7 @@ export default function OnboardingModal({ user, onComplete }) {
 
     try {
       const token = getToken();
-      const org = getTenant();
+      const org = user?.org_slug || getTenant() || "public";
 
       const result = await saveOnboarding(payload, token, org);
       const nextUser = result?.user
