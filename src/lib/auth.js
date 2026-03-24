@@ -132,10 +132,42 @@ export function clearPendingOtpContext() {
 export function setSession({ token, user, tenant }) {
   if (token) setToken(token);
 
+  const existingUser = getUser();
+  const mergedUser = user
+    ? normalizeUser({
+        ...(existingUser || {}),
+        ...user,
+        role:
+          user?.role ||
+          existingUser?.role ||
+          (user?.is_admin === true ? "admin" : null) ||
+          (user?.admin === true ? "admin" : null) ||
+          "user",
+        is_admin:
+          user?.is_admin === true ||
+          user?.admin === true ||
+          existingUser?.is_admin === true ||
+          existingUser?.admin === true ||
+          String(user?.role || existingUser?.role || "").trim().toLowerCase() === "admin" ||
+          String(user?.role || existingUser?.role || "").trim().toLowerCase() === "owner" ||
+          String(user?.role || existingUser?.role || "").trim().toLowerCase() === "superadmin",
+        admin:
+          user?.admin === true ||
+          user?.is_admin === true ||
+          existingUser?.admin === true ||
+          existingUser?.is_admin === true ||
+          String(user?.role || existingUser?.role || "").trim().toLowerCase() === "admin" ||
+          String(user?.role || existingUser?.role || "").trim().toLowerCase() === "owner" ||
+          String(user?.role || existingUser?.role || "").trim().toLowerCase() === "superadmin",
+      })
+    : existingUser;
+
   const resolvedTenant =
     tenant ||
     user?.org_slug ||
     user?.tenant ||
+    existingUser?.org_slug ||
+    existingUser?.tenant ||
     getTenant() ||
     "public";
 
@@ -143,8 +175,8 @@ export function setSession({ token, user, tenant }) {
     setTenant(resolvedTenant);
   }
 
-  if (user) {
-    setUser(user);
+  if (mergedUser) {
+    setUser(mergedUser);
   }
 }
 
