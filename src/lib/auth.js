@@ -1,145 +1,226 @@
-export const LS_TOKEN = "orkio_token";
-export const LS_USER = "orkio_user";
-export const LS_TENANT = "orkio_tenant";
-export const LS_PENDING_OTP = "orkio_pending_otp";
-export const LS_SESSION_TS = "orkio_session_ts";
+// src/lib/auth.js
 
-function safeJsonParse(value, fallback = null) {
-  try {
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-}
+const TOKEN_KEY = "orkio_token";
+const USER_KEY = "orkio_user";
+const TENANT_KEY = "orkio_tenant";
+
+/**
+ * ============================
+ * TOKEN
+ * ============================
+ */
 
 export function getToken() {
-  return localStorage.getItem(LS_TOKEN) || "";
+  return localStorage.getItem(TOKEN_KEY);
 }
+
+export function setToken(token) {
+  if (!token) return;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+/**
+ * ============================
+ * TENANT
+ * ============================
+ */
 
 export function getTenant() {
-  return localStorage.getItem(LS_TENANT) || "public";
-}
-
-export function getUser() {
-  return safeJsonParse(localStorage.getItem(LS_USER), null);
-}
-
-export function isAuthenticated() {
-  return !!getToken();
+  return localStorage.getItem(TENANT_KEY);
 }
 
 export function setTenant(tenant) {
-  const nextTenant = (tenant || "public").trim() || "public";
-  localStorage.setItem(LS_TENANT, nextTenant);
-  return nextTenant;
+  if (!tenant) return;
+  localStorage.setItem(TENANT_KEY, tenant);
 }
 
-export function setSession({ token, access_token, user, tenant } = {}) {
-  const finalToken = access_token || token || "";
-  const nextTenant = tenant ? setTenant(tenant) : getTenant();
+export function clearTenant() {
+  localStorage.removeItem(TENANT_KEY);
+}
 
-  if (finalToken) {
-    localStorage.setItem(LS_TOKEN, finalToken);
+/**
+ * ============================
+ * USER STORAGE
+ * ============================
+ */
+
+export function getUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
-
-  if (user) {
-    localStorage.setItem(LS_USER, JSON.stringify(user));
-  }
-
-  localStorage.setItem(LS_SESSION_TS, String(Date.now()));
-  return nextTenant;
 }
 
 export function setUser(user) {
-  if (!user) {
-    localStorage.removeItem(LS_USER);
-    return;
-  }
-  localStorage.setItem(LS_USER, JSON.stringify(user));
+  if (!user) return;
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
+
+export function clearUser() {
+  localStorage.removeItem(USER_KEY);
+}
+
+/**
+ * ============================
+ * SESSION
+ * ============================
+ */
 
 export function clearSession() {
-  localStorage.removeItem(LS_TOKEN);
-  localStorage.removeItem(LS_USER);
-  localStorage.removeItem(LS_TENANT);
-  localStorage.removeItem(LS_SESSION_TS);
+  clearToken();
+  clearUser();
+  clearTenant();
 }
 
-export function isAdmin(user) {
-  return user?.role === "admin";
+export function storeSession({ token, user, tenant }) {
+  if (token) setToken(token);
+
+  if (tenant) {
+    setTenant(tenant);
+  } else if (user?.org_slug) {
+    setTenant(user.org_slug);
+  }
+
+  if (user) {
+    setUser(normalizeUser(user));
+  }
 }
+
+/**
+ * ============================
+ * USER NORMALIZATION
+ * ============================
+ */
+
+function normalizeUser(user) {
+  if (!user) return null;
+
+  const role =
+    user.role ||
+    (user.is_admin ? "admin" : null) ||
+    (user.admin ? "admin" : null) ||
+    "user";
+
+  return {
+    ...user,
+    role,
+    is_admin:
+      user.is_admin === true ||
+      user.admin === true ||
+      role === "admin" ||
+      role === "owner" ||
+      role === "superadmin",
+    admin:
+      user.admin === true ||
+      user.is_admin === true ||
+      role === "admin" ||
+      role === "owner" ||
+      role === "superadmin",
+  };
+}
+
+/**
+ * ============================
+ * LOGIN FLOW (OTP)
+ * ============================
+ */
+
+export function completeOtpLogin(data) {
+  if (!data?.access_token || !data?.user) {
+    throw new Error("Invalid OTP login response");
+  }
+
+  const tenant =
+    data.user?.org_slug ||
+    data.tenant ||
+    localStorage.getItem(TENANT_KEY) ||
+    "public";
+
+  storeSession({
+    token: data.access_token,
+    user: data.user,
+    tenant,
+  });
+}
+
+/**
+ * ============================
+ * AUTH STATE
+ * ============================
+ */
+
+export function isAuthenticated() {
+  return Boolean(getToken());
+}
+
+/**
+ * ============================
+ * APPROVAL
+ * ============================
+ */
 
 export function isApproved(user) {
   if (!user) return false;
-  const usageTier = String(user.usage_tier || "").toLowerCase();
-  const signupSource = String(user.signup_source || "").toLowerCase();
-  const signupCodeLabel = String(user.signup_code_label || "").toLowerCase();
-  return !!(
-    user.role === "admin" ||
+
+  return (
     user.approved_at ||
-    usageTier.startsWith("summit_") ||
-    signupSource === "investor" ||
-    signupCodeLabel === "efata777"
+    user.usage_tier?.startsWith("summit") ||
+    user.signup_source === "investor" ||
+    user.signup_code_label === "efata777"
   );
 }
 
-export function hasCompletedOnboarding(user) {
-  return !!(user && user.onboarding_completed);
+/**
+ * ============================
+ * ADMIN ACCESS
+ * ============================
+ */
+
+export function isAdmin(user) {
+  if (!user) return false;
+
+  return (
+    user.role === "admin" ||
+    user.role === "owner" ||
+    user.role === "superadmin" ||
+    user.is_admin === true ||
+    user.admin === true
+  );
 }
 
-export function savePendingOtpContext(ctx = {}) {
-  const payload = {
-    email: String(ctx.email || "").trim().toLowerCase(),
-    tenant: (ctx.tenant || getTenant() || "public").trim() || "public",
-    name: String(ctx.name || "").trim(),
-    accessCode: String(ctx.accessCode || "").trim().toUpperCase(),
-    created_at: Date.now(),
-  };
-  localStorage.setItem(LS_PENDING_OTP, JSON.stringify(payload));
-  return payload;
-}
+/**
+ * ============================
+ * MERGE /api/me RESPONSE
+ * ============================
+ */
 
-export function getPendingOtpContext() {
-  return safeJsonParse(localStorage.getItem(LS_PENDING_OTP), null);
-}
+export function mergeUserFromApiMe(apiUser) {
+  if (!apiUser) return;
 
-export function clearPendingOtp() {
-  localStorage.removeItem(LS_PENDING_OTP);
-}
+  const existing = getUser();
 
-export function completeOtpLogin(payload = {}) {
-  const nextTenant = setSession({
-    access_token: payload.access_token,
-    token: payload.token,
-    user: payload.user,
-    tenant: payload.user?.org_slug || payload.tenant || getTenant() || "public",
+  const merged = normalizeUser({
+    ...existing,
+    ...apiUser,
   });
-  clearPendingOtp();
-  return { ...payload, tenant: nextTenant };
+
+  setUser(merged);
 }
 
-export async function logout({ apiBase = "", org, token } = {}) {
-  const authToken = token || getToken();
-  const tenant = org || getTenant() || "public";
+/**
+ * ============================
+ * LOGOUT
+ * ============================
+ */
 
-  try {
-    if (authToken) {
-      const url = `${apiBase || ""}/api/auth/logout`;
-      await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "X-Org-Slug": tenant,
-        },
-        credentials: "include",
-      });
-    }
-  } catch (err) {
-    console.warn("logout backend call failed", err);
-  } finally {
-    clearPendingOtp();
-    clearSession();
-  }
-
-  return { ok: true };
+export function logout() {
+  clearSession();
+  window.location.href = "/auth";
 }
