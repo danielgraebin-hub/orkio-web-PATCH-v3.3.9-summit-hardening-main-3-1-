@@ -1,4 +1,3 @@
-// src/routes/AuthPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../ui/api.js";
@@ -56,6 +55,15 @@ const btn = {
   color: "#fff",
 };
 const muted = { color: "#64748b", fontSize: 14, lineHeight: 1.5 };
+const codeHint = {
+  marginTop: 8,
+  fontSize: 12,
+  color: "#475569",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  padding: "10px 12px",
+};
 
 export default function AuthPage() {
   const nav = useNavigate();
@@ -78,10 +86,18 @@ export default function AuthPage() {
   useEffect(() => {
     const token = getToken();
     const user = getUser();
-    if (token && isApproved(user)) {
+    if (token && user && isApproved(user)) {
       nav("/app", { replace: true });
     }
   }, [nav]);
+
+  useEffect(() => {
+    const ctx = getPendingOtpContext();
+    if (ctx?.email) {
+      setOtpMode(true);
+      setPendingEmail(ctx.email);
+    }
+  }, []);
 
   const title = useMemo(
     () => (otpMode ? "Valide seu código de acesso" : "Crie sua conta Summit"),
@@ -89,11 +105,25 @@ export default function AuthPage() {
   );
 
   function normalizeEmail(v) {
-    return (v || "").trim().toLowerCase();
+    return String(v || "").trim().toLowerCase();
   }
 
   function normalizeAccessCode(v) {
-    return (v || "").trim().toUpperCase();
+    return String(v || "").trim().toUpperCase();
+  }
+
+  async function finalizeSession(data, resolvedTenant) {
+    const nextTenant = setTenant(resolvedTenant || tenant);
+    if (!data?.access_token || !data?.user) {
+      throw new Error("Sessão inválida");
+    }
+    setSession({
+      token: data.access_token,
+      user: data.user,
+      tenant: nextTenant,
+    });
+    completeOtpLogin({ ...data, tenant: nextTenant });
+    nav(data.redirect_to || "/app", { replace: true });
   }
 
   async function doRegister() {
@@ -107,9 +137,17 @@ export default function AuthPage() {
       setStatus("Você precisa aceitar os termos para continuar.");
       return;
     }
-    const nameNormalized = (name || "").trim();
+    const nameNormalized = String(name || "").trim();
     if (!nameNormalized) {
       setStatus("Informe seu nome.");
+      return;
+    }
+
+    const emailNormalized = normalizeEmail(email);
+    const normalizedAccessCode = normalizeAccessCode(accessCode);
+
+    if (!emailNormalized || !password || !normalizedAccessCode) {
+      setStatus("Preencha nome, e-mail, senha e código de acesso.");
       return;
     }
 
@@ -117,9 +155,6 @@ export default function AuthPage() {
     setStatus("Criando sua conta...");
 
     try {
-      const emailNormalized = normalizeEmail(email);
-      const normalizedAccessCode = normalizeAccessCode(accessCode);
-
       const { data } = await apiFetch("/api/auth/register", {
         method: "POST",
         org: tenant,
@@ -135,13 +170,20 @@ export default function AuthPage() {
       });
 
       if (data?.access_token && data?.user) {
-        setTenant(tenant);
-        setSession({ token: data.access_token, user: data.user, tenant });
-        nav(data.redirect_to || "/app", { replace: true });
+        await finalizeSession(data, tenant);
         return;
       }
 
       setStatus("Conta criada. Vamos validar seu acesso...");
+      savePendingOtpContext({
+        email: data?.email || emailNormalized,
+        tenant,
+        name: nameNormalized,
+        accessCode: normalizedAccessCode,
+      });
+      setPendingEmail(data?.email || emailNormalized);
+      setOtpMode(true);
+
       const { data: loginData } = await apiFetch("/api/auth/login", {
         method: "POST",
         org: tenant,
@@ -149,27 +191,26 @@ export default function AuthPage() {
       });
 
       if (loginData?.pending_otp) {
-        setTenant(tenant);
         savePendingOtpContext({
           email: loginData.email || emailNormalized,
           tenant,
+          name: nameNormalized,
+          accessCode: normalizedAccessCode,
         });
-        setOtpMode(true);
         setPendingEmail(loginData.email || emailNormalized);
+        setOtpMode(true);
         setStatus(loginData.message || "Enviamos um código para o seu e-mail.");
         return;
       }
 
       if (loginData?.access_token && loginData?.user) {
-        setTenant(tenant);
-        setSession({ token: loginData.access_token, user: loginData.user, tenant });
-        nav(loginData.redirect_to || "/app", { replace: true });
+        await finalizeSession(loginData, tenant);
         return;
       }
 
       setStatus("Conta criada, mas o fluxo não consolidou a sessão.");
     } catch (err) {
-      setStatus(err.message || "Falha no registro.");
+      setStatus(err?.message || "Falha no registro.");
     } finally {
       setBusy(false);
     }
@@ -177,9 +218,16 @@ export default function AuthPage() {
 
   async function doVerifyOtp() {
     if (busy) return;
+
     const ctx = getPendingOtpContext();
     const resolvedTenant = ctx?.tenant || tenant;
     const emailNormalized = normalizeEmail(ctx?.email || pendingEmail || email);
+    const code = String(otpCode || "").trim();
+
+    if (!emailNormalized || !code) {
+      setStatus("Informe o código OTP recebido por e-mail.");
+      return;
+    }
 
     setBusy(true);
     setStatus("Validando código...");
@@ -191,7 +239,7 @@ export default function AuthPage() {
         body: {
           tenant: resolvedTenant,
           email: emailNormalized,
-          code: (otpCode || "").trim(),
+          code,
         },
       });
 
@@ -200,11 +248,9 @@ export default function AuthPage() {
         return;
       }
 
-      setTenant(resolvedTenant);
-      completeOtpLogin({ ...data, tenant: resolvedTenant });
-      nav(data.redirect_to || "/app", { replace: true });
+      await finalizeSession(data, resolvedTenant);
     } catch (err) {
-      setStatus(err.message || "Falha na validação do código.");
+      setStatus(err?.message || "Falha na validação do código.");
     } finally {
       setBusy(false);
     }
@@ -220,7 +266,7 @@ export default function AuthPage() {
         <p style={{ ...muted, marginTop: 0 }}>
           {otpMode
             ? "Use o código enviado ao seu e-mail para entrar direto no console."
-            : "O registro correto deve levar você do cadastro ao OTP e do OTP direto para o console."}
+            : "Cadastro → OTP → console. Sem loops, sem novo login, sem aprovação manual para Summit elegível."}
         </p>
 
         {!otpMode ? (
@@ -229,49 +275,83 @@ export default function AuthPage() {
               <label style={label}>Nome completo</label>
               <input style={input} placeholder="Seu nome" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
+
             <div>
               <label style={label}>E-mail</label>
               <input style={input} placeholder="voce@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
                 <label style={label}>Senha</label>
-                <input style={input} placeholder="Senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <input style={input} type="password" placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
               <div>
                 <label style={label}>Confirmar senha</label>
-                <input style={input} placeholder="Confirmar senha" type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
+                <input style={input} type="password" placeholder="Repita sua senha" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
               </div>
             </div>
+
             <div>
               <label style={label}>Código de acesso</label>
-              <input style={input} placeholder="southsummit26 ou efata777" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} />
+              <input
+                style={input}
+                placeholder="SOUTHSUMMIT26 ou EFATA777"
+                value={accessCode}
+                onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+              />
+              <div style={codeHint}>
+                <strong>South Summit:</strong> use <code>southsummit26</code> para acesso geral.<br />
+                <strong>Investidores:</strong> use <code>efata777</code> para acesso expandido.
+              </div>
             </div>
+
             <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: "#334155", fontSize: 14 }}>
-              <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} style={{ marginTop: 3 }} />
-              <span>Li e aceito os termos legais para seguir com o acesso.</span>
+              <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} />
+              <span>Aceito os termos e a política de privacidade.</span>
             </label>
-            <button disabled={busy} onClick={doRegister} style={{ ...btn, opacity: busy ? 0.7 : 1 }}>
-              {busy ? "Processando..." : "Criar conta"}
+
+            <button style={btn} disabled={busy} onClick={doRegister}>
+              {busy ? "Processando..." : "Criar conta e receber OTP"}
             </button>
           </div>
         ) : (
           <div style={{ display: "grid", gap: 14 }}>
             <div>
+              <label style={label}>E-mail</label>
+              <input style={{ ...input, opacity: 0.85 }} readOnly value={pendingEmail || email} />
+            </div>
+            <div>
               <label style={label}>Código OTP</label>
               <input style={input} placeholder="Digite o código recebido" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} />
             </div>
-            <button disabled={busy} onClick={doVerifyOtp} style={{ ...btn, opacity: busy ? 0.7 : 1 }}>
+            <button style={btn} disabled={busy} onClick={doVerifyOtp}>
               {busy ? "Validando..." : "Entrar no console"}
             </button>
           </div>
         )}
 
-        {status ? (
-          <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 16, background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e3a8a", fontSize: 14 }}>
+        {!!status && (
+          <div
+            style={{
+              marginTop: 16,
+              borderRadius: 16,
+              padding: "12px 14px",
+              fontSize: 14,
+              background: status.toLowerCase().includes("falha") || status.toLowerCase().includes("inválido")
+                ? "rgba(239,68,68,0.10)"
+                : "rgba(37,99,235,0.08)",
+              color: status.toLowerCase().includes("falha") || status.toLowerCase().includes("inválido")
+                ? "#991b1b"
+                : "#1e3a8a",
+              border: status.toLowerCase().includes("falha") || status.toLowerCase().includes("inválido")
+                ? "1px solid rgba(239,68,68,0.25)"
+                : "1px solid rgba(37,99,235,0.18)",
+            }}
+          >
             {status}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
