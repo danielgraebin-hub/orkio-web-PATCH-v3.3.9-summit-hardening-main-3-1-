@@ -1,5 +1,3 @@
-// AuthPage.jsx (Admin shortcut version)
-
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../ui/api.js";
@@ -13,8 +11,6 @@ import {
   isApproved,
   isAdmin,
 } from "../lib/auth.js";
-
-/* ---------- styles ---------- */
 
 const shell = {
   minHeight: "100vh",
@@ -35,6 +31,18 @@ const card = {
   padding: 24,
 };
 
+const label = { display: "block", marginBottom: 8, fontSize: 13, fontWeight: 700, color: "#334155" };
+const input = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  outline: "none",
+  fontSize: 15,
+  boxSizing: "border-box",
+};
 const btn = {
   width: "100%",
   border: 0,
@@ -46,7 +54,6 @@ const btn = {
   background: "linear-gradient(135deg, #2563eb, #0f172a)",
   color: "#fff",
 };
-
 const secondaryBtn = {
   width: "100%",
   border: "1px solid #cbd5e1",
@@ -58,18 +65,32 @@ const secondaryBtn = {
   background: "#ffffff",
   color: "#0f172a",
 };
+const muted = { color: "#64748b", fontSize: 14, lineHeight: 1.5 };
 
-/* ---------- component ---------- */
+const adminChip = {
+  border: "1px solid rgba(15,23,42,0.10)",
+  background: "rgba(255,255,255,0.75)",
+  color: "#475569",
+  fontSize: 12,
+  padding: "6px 10px",
+  borderRadius: 999,
+  cursor: "pointer",
+};
 
 export default function AuthPage() {
   const nav = useNavigate();
   const [tenant] = useState("public");
 
-  const [mode, setMode] = useState("register");
+  const [mode, setMode] = useState("register"); // register | login
   const [otpMode, setOtpMode] = useState(false);
 
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
+
   const [otpCode, setOtpCode] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
 
@@ -78,182 +99,416 @@ export default function AuthPage() {
 
   const token = getToken();
   const currentUser = getUser();
-
   const showAdminShortcut =
     !!token &&
     !!currentUser &&
     isApproved(currentUser) &&
     isAdmin(currentUser);
 
-  /* ---------- auto redirect if already logged ---------- */
-
   useEffect(() => {
-    if (token && currentUser && isApproved(currentUser)) {
+    const token = getToken();
+    const user = getUser();
+    if (token && user && isApproved(user)) {
       const redirect = sessionStorage.getItem("post_auth_redirect");
-      const next = redirect || (isAdmin(currentUser) ? "/admin" : "/app");
-
+      const next = redirect || (isAdmin(user) ? "/admin" : "/app");
       sessionStorage.removeItem("post_auth_redirect");
       nav(next, { replace: true });
     }
-  }, [nav, token, currentUser]);
+  }, [nav]);
 
-  /* ---------- admin shortcut ---------- */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedMode = (params.get("mode") || "").toLowerCase();
+    if (requestedMode === "login" || requestedMode === "signin") {
+      setMode("login");
+    }
+
+    const ctx = getPendingOtpContext();
+    if (ctx?.email) {
+      setOtpMode(true);
+      setPendingEmail(ctx.email);
+      setEmail(ctx.email);
+    }
+  }, []);
+
+  const title = useMemo(() => {
+    if (otpMode) return "Verify your access code";
+    return mode === "login" ? "Sign in to your account" : "Create your account";
+  }, [otpMode, mode]);
+
+  const subtitle = useMemo(() => {
+    if (otpMode) {
+      return "Use the one-time code sent to your email to enter the console.";
+    }
+    if (mode === "login") {
+      return "Sign in with your email and password. If required, we will send a one-time code to complete access.";
+    }
+    return "Register, verify your email with OTP, and continue straight into the console.";
+  }, [otpMode, mode]);
+
+  function normalizeEmail(v) {
+    return String(v || "").trim().toLowerCase();
+  }
+
+  function normalizeAccessCode(v) {
+    return String(v || "").trim().toUpperCase();
+  }
+
+  function setAuthMode(nextMode) {
+    setMode(nextMode);
+    setOtpMode(false);
+    setOtpCode("");
+    setStatus("");
+    const url = new URL(window.location.href);
+    url.searchParams.set("mode", nextMode);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }
 
   function goToAdminDirect() {
     nav("/admin");
   }
 
-  /* ---------- finalize session ---------- */
-
-  async function finalizeSession(data) {
-    const nextTenant = tenant || "public";
+  async function finalizeSession(data, resolvedTenant) {
+    const nextTenant = resolvedTenant || tenant || "public";
     setTenant(nextTenant);
+
+    if (!data?.access_token || !data?.user) {
+      throw new Error("Invalid session payload.");
+    }
 
     completeOtpLogin({ ...data, tenant: nextTenant });
 
     const storedUser = getUser();
-
     const redirect = sessionStorage.getItem("post_auth_redirect");
-    const next =
-      redirect || (isAdmin(storedUser) ? "/admin" : "/app");
+    const next = redirect || (isAdmin(storedUser) ? "/admin" : "/app");
 
     sessionStorage.removeItem("post_auth_redirect");
-
     nav(next, { replace: true });
   }
 
-  /* ---------- login ---------- */
-
-  async function doLogin() {
+  async function doRegister() {
     if (busy) return;
 
+    if (password !== passwordConfirm) {
+      setStatus("Passwords do not match.");
+      return;
+    }
+    if (!acceptTerms) {
+      setStatus("You must accept the terms to continue.");
+      return;
+    }
+
+    const nameNormalized = String(name || "").trim();
+    const emailNormalized = normalizeEmail(email);
+    const normalizedAccessCode = normalizeAccessCode(accessCode);
+
+    if (!nameNormalized) {
+      setStatus("Please enter your full name.");
+      return;
+    }
+
+    if (!emailNormalized || !password || !normalizedAccessCode) {
+      setStatus("Please complete name, email, password, and access code.");
+      return;
+    }
+
     setBusy(true);
+    setStatus("Creating your account...");
 
     try {
-      const { data } = await apiFetch("/api/auth/login", {
+      await apiFetch("/api/auth/register", {
         method: "POST",
         org: tenant,
-        body: { tenant, email, password },
+        body: {
+          tenant,
+          email: emailNormalized,
+          name: nameNormalized,
+          password,
+          access_code: normalizedAccessCode,
+          accept_terms: acceptTerms,
+          marketing_consent: false,
+        },
       });
 
-      if (data?.pending_otp) {
-        savePendingOtpContext({
-          email: data.email || email,
-          tenant,
-        });
+      setStatus("Account created. Sending OTP...");
+      savePendingOtpContext({
+        email: emailNormalized,
+        tenant,
+        name: nameNormalized,
+        accessCode: normalizedAccessCode,
+      });
+      setPendingEmail(emailNormalized);
+      setOtpMode(true);
 
-        setPendingEmail(data.email || email);
-        setOtpMode(true);
+      const { data: loginData } = await apiFetch("/api/auth/login", {
+        method: "POST",
+        org: tenant,
+        body: { tenant, email: emailNormalized, password },
+      });
+
+      if (loginData?.pending_otp) {
+        savePendingOtpContext({
+          email: loginData.email || emailNormalized,
+          tenant,
+          name: nameNormalized,
+          accessCode: normalizedAccessCode,
+        });
+        setPendingEmail(loginData.email || emailNormalized);
+        setStatus(
+          loginData.message ||
+          "OTP sent. Verify it to enter the console."
+        );
         return;
       }
 
-      if (data?.access_token && data?.user) {
-        await finalizeSession(data);
+      if (loginData?.access_token && loginData?.user) {
+        await finalizeSession(loginData, tenant);
+        return;
       }
+
+      setStatus(loginData?.message || "Account created, but OTP was not issued correctly.");
+    } catch (err) {
+      setStatus(err?.message || "Registration failed.");
     } finally {
       setBusy(false);
     }
   }
 
-  /* ---------- verify otp ---------- */
+  async function doLogin() {
+    if (busy) return;
+
+    const emailNormalized = normalizeEmail(email);
+
+    if (!emailNormalized || !password) {
+      setStatus("Please enter your email and password.");
+      return;
+    }
+
+    setBusy(true);
+    setStatus("Signing you in...");
+
+    try {
+      const { data } = await apiFetch("/api/auth/login", {
+        method: "POST",
+        org: tenant,
+        body: {
+          tenant,
+          email: emailNormalized,
+          password,
+        },
+      });
+
+      if (data?.pending_otp) {
+        savePendingOtpContext({
+          email: data.email || emailNormalized,
+          tenant,
+        });
+        setPendingEmail(data.email || emailNormalized);
+        setOtpMode(true);
+        setStatus(data?.message || "OTP sent. Check your email.");
+        return;
+      }
+
+      if (data?.access_token && data?.user) {
+        await finalizeSession(data, tenant);
+        return;
+      }
+
+      setStatus(data?.message || "Unable to complete sign in.");
+    } catch (err) {
+      setStatus(err?.message || "Sign in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function doVerifyOtp() {
     if (busy) return;
 
     const ctx = getPendingOtpContext();
+    const resolvedTenant = ctx?.tenant || tenant;
+    const emailNormalized = normalizeEmail(ctx?.email || pendingEmail || email);
+    const code = String(otpCode || "").trim();
 
-    const { data } = await apiFetch(
-      "/api/auth/login/verify-otp",
-      {
+    if (!emailNormalized || !code) {
+      setStatus("Please enter the OTP sent by email.");
+      return;
+    }
+
+    setBusy(true);
+    setStatus("Verifying code...");
+
+    try {
+      const { data } = await apiFetch("/api/auth/login/verify-otp", {
         method: "POST",
-        org: tenant,
+        org: resolvedTenant,
         body: {
-          tenant,
-          email: ctx?.email || pendingEmail,
-          code: otpCode,
+          tenant: resolvedTenant,
+          email: emailNormalized,
+          code,
         },
-      }
-    );
+      });
 
-    if (data?.access_token && data?.user) {
-      await finalizeSession(data);
+      if (!data?.access_token || !data?.user) {
+        setStatus(data?.message || "Invalid code or session not finalized.");
+        return;
+      }
+
+      await finalizeSession(data, resolvedTenant);
+    } catch (err) {
+      setStatus(err?.message || "OTP validation failed.");
+    } finally {
+      setBusy(false);
     }
   }
-
-  /* ---------- render ---------- */
 
   return (
     <div style={shell}>
       <div style={card}>
-        <h1>Access Orkio</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", fontWeight: 800 }}>
+            Orkio
+          </div>
+          {showAdminShortcut ? (
+            <button type="button" onClick={goToAdminDirect} style={adminChip} title="Admin Console">
+              admin
+            </button>
+          ) : null}
+        </div>
 
-        {showAdminShortcut && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              marginBottom: 12,
-            }}
-          >
+        <h1 style={{ margin: "10px 0 8px", fontSize: 32, lineHeight: 1.05 }}>{title}</h1>
+        <p style={{ ...muted, marginTop: 0 }}>{subtitle}</p>
+
+        {!otpMode ? (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+              <button
+                type="button"
+                style={mode === "register" ? btn : secondaryBtn}
+                onClick={() => setAuthMode("register")}
+                disabled={busy}
+              >
+                Create account
+              </button>
+              <button
+                type="button"
+                style={mode === "login" ? btn : secondaryBtn}
+                onClick={() => setAuthMode("login")}
+                disabled={busy}
+              >
+                Sign in
+              </button>
+            </div>
+
+            {mode === "register" ? (
+              <div style={{ display: "grid", gap: 14 }}>
+                <div>
+                  <label style={label}>Full name</label>
+                  <input style={input} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+
+                <div>
+                  <label style={label}>Email</label>
+                  <input style={input} placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div>
+                    <label style={label}>Password</label>
+                    <input style={input} type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={label}>Confirm password</label>
+                    <input style={input} type="password" placeholder="Repeat your password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={label}>Access code</label>
+                  <input
+                    style={input}
+                    placeholder="Enter your access code"
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: "#334155", fontSize: 14 }}>
+                  <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} />
+                  <span>I agree to the terms and privacy policy.</span>
+                </label>
+
+                <button style={btn} disabled={busy} onClick={doRegister}>
+                  {busy ? "Processing..." : "Create account and receive OTP"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 14 }}>
+                <div>
+                  <label style={label}>Email</label>
+                  <input style={input} placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+
+                <div>
+                  <label style={label}>Password</label>
+                  <input style={input} type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                </div>
+
+                <button style={btn} disabled={busy} onClick={doLogin}>
+                  {busy ? "Processing..." : "Sign in"}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div>
+              <label style={label}>Email</label>
+              <input style={{ ...input, opacity: 0.85 }} readOnly value={pendingEmail || email} />
+            </div>
+            <div>
+              <label style={label}>OTP code</label>
+              <input style={input} placeholder="Enter the code you received" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} />
+            </div>
+            <button style={btn} disabled={busy} onClick={doVerifyOtp}>
+              {busy ? "Verifying..." : "Enter console"}
+            </button>
             <button
-              onClick={goToAdminDirect}
-              style={{
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "transparent",
-                color: "#475569",
-                fontSize: 12,
-                padding: "6px 10px",
-                borderRadius: 999,
-                cursor: "pointer",
-                opacity: 0.8,
+              type="button"
+              style={secondaryBtn}
+              disabled={busy}
+              onClick={() => {
+                setOtpMode(false);
+                setOtpCode("");
+                setStatus("");
               }}
             >
-              admin
+              Back
             </button>
           </div>
         )}
 
-        {!otpMode ? (
-          <>
-            <input
-              placeholder="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
-            <input
-              type="password"
-              placeholder="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-
-            <button style={btn} onClick={doLogin}>
-              Sign in
-            </button>
-          </>
-        ) : (
-          <>
-            <input
-              placeholder="OTP code"
-              value={otpCode}
-              onChange={(e) => setOtpCode(e.target.value)}
-            />
-
-            <button style={btn} onClick={doVerifyOtp}>
-              Enter console
-            </button>
-
-            <button
-              style={secondaryBtn}
-              onClick={() => setOtpMode(false)}
-            >
-              Back
-            </button>
-          </>
+        {!!status && (
+          <div
+            style={{
+              marginTop: 16,
+              borderRadius: 16,
+              padding: "12px 14px",
+              fontSize: 14,
+              background: status.toLowerCase().includes("failed") || status.toLowerCase().includes("invalid")
+                ? "rgba(239,68,68,0.10)"
+                : "rgba(37,99,235,0.08)",
+              color: status.toLowerCase().includes("failed") || status.toLowerCase().includes("invalid")
+                ? "#991b1b"
+                : "#1e3a8a",
+              border: status.toLowerCase().includes("failed") || status.toLowerCase().includes("invalid")
+                ? "1px solid rgba(239,68,68,0.25)"
+                : "1px solid rgba(37,99,235,0.18)",
+            }}
+          >
+            {status}
+          </div>
         )}
-
-        {status && <div>{status}</div>}
       </div>
     </div>
   );
