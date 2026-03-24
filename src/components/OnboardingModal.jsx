@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { getTenant, getToken } from "../lib/auth.js";
 
+console.log("ONBOARDING MODAL BUILD 9d86116");
+
 const USER_TYPES = [
   { value: "founder", label: "Founder" },
   { value: "investor", label: "Investor" },
