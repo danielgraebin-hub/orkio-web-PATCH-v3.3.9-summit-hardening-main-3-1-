@@ -522,7 +522,13 @@ useEffect(() => {
         setUser(mergedUser);
         try { setSession({ token: t, user: mergedUser, tenant: mergedUser.org_slug || org }); } catch {}
 
-        if (!isApproved(mergedUser)) {
+        const explicitPendingApproval = (
+          mergedUser?.pending_approval === true
+          || mergedUser?.auth_status === "pending_approval"
+          || mergedUser?.status === "pending"
+        );
+
+        if (explicitPendingApproval) {
           clearSession();
           nav("/auth?pending_approval=1");
           return;
@@ -2592,9 +2598,30 @@ async function stopRealtime(reason = 'client_stop') {
       <OnboardingModal
         user={user}
         onComplete={(nextUser) => {
-          const mergedUser = nextUser || { ...(user || {}), onboarding_completed: true };
+          const refreshedToken = nextUser?.access_token || token;
+          const mergedUser = {
+            ...(user || {}),
+            ...(nextUser || {}),
+            org_slug: nextUser?.org_slug || user?.org_slug || tenant,
+            role: nextUser?.role || user?.role || "user",
+            approved_at: nextUser?.approved_at ?? user?.approved_at ?? null,
+            usage_tier: nextUser?.usage_tier ?? user?.usage_tier ?? null,
+            signup_source: nextUser?.signup_source ?? user?.signup_source ?? null,
+            signup_code_label: nextUser?.signup_code_label ?? user?.signup_code_label ?? null,
+            product_scope: nextUser?.product_scope ?? user?.product_scope ?? null,
+            onboarding_completed: true,
+          };
+          mergedUser.is_admin = hasAdminAccess(mergedUser);
+          mergedUser.admin = mergedUser.is_admin === true;
           setUser(mergedUser);
-          try { setSession({ token, user: mergedUser, tenant: mergedUser?.org_slug || tenant }); } catch {}
+          try {
+            setSession({
+              token: refreshedToken,
+              user: mergedUser,
+              tenant: mergedUser?.org_slug || tenant,
+            });
+            setToken(refreshedToken);
+          } catch {}
           setOnboardingOpen(false);
           setOnboardingStatus("");
           setUploadStatus("✅ Onboarding concluído.");
