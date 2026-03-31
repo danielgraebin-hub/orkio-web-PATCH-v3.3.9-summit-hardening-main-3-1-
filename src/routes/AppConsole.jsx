@@ -1657,7 +1657,7 @@ function scheduleRealtimeIdleFollowup() {
                     type: "server_vad",
                     silence_duration_ms: REALTIME_SERVER_VAD_SILENCE_MS,
                     prefix_padding_ms: REALTIME_SERVER_VAD_PREFIX_MS,
-                    create_response: false
+                    create_response: true
                   }
                 }
               }
